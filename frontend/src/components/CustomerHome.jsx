@@ -12,6 +12,7 @@ export default function CustomerHome({
   searchQuery,
   onSearchChange,
   onAddToCart,
+  cartItems = [],
   user,
   onOpenAuth,
 }) {
@@ -127,31 +128,44 @@ export default function CustomerHome({
           </div>
         </div>
 
-        {/* Category Filter Pills */}
-        <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-none">
-          <button
-            onClick={() => onSelectCategory(0)}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
-              selectedCategory === 0
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            All Categories
-          </button>
-          {categories.map((c) => (
+        {/* Category Filter Section */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-1">
+            <span>Categories ({categories.length}):</span>
+            {selectedCategory !== 0 && (
+              <button
+                onClick={() => onSelectCategory(0)}
+                className="text-emerald-600 hover:underline text-[11px] cursor-pointer"
+              >
+                Clear category
+              </button>
+            )}
+          </div>
+          <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
             <button
-              key={c.categoryId}
-              onClick={() => onSelectCategory(c.categoryId)}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
-                selectedCategory === c.categoryId
-                  ? 'bg-emerald-600 text-white shadow-xs'
+              onClick={() => onSelectCategory(0)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                selectedCategory === 0
+                  ? 'bg-slate-900 text-white shadow-xs'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
               }`}
             >
-              {c.categoryName}
+              All Categories
             </button>
-          ))}
+            {categories.map((c) => (
+              <button
+                key={c.categoryId}
+                onClick={() => onSelectCategory(c.categoryId)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                  selectedCategory === c.categoryId
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {c.categoryName}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -180,6 +194,7 @@ export default function CustomerHome({
               const qty = getQty(p.productId);
               const dynamicTotal = (Number(p.unitPrice) * qty).toFixed(2);
               const isOutOfStock = p.currentStock <= 0;
+              const isInCart = Boolean(cartItems?.some(item => item.productId === p.productId));
 
               return (
                 <div
@@ -245,7 +260,11 @@ export default function CustomerHome({
                       </div>
 
                       {/* Dynamic Quantity Selector */}
-                      <div className="mt-3 flex items-center justify-between bg-slate-50 p-2 rounded-xl border border-slate-100">
+                      <div className={`mt-3 flex items-center justify-between p-2 rounded-xl border transition ${
+                        user && isInCart
+                          ? 'bg-slate-100/70 border-slate-200 opacity-60'
+                          : 'bg-slate-50 border-slate-100'
+                      }`}>
                         <span className="text-xs font-medium text-slate-600">
                           {p.unitType === '100g' ? `Qty (${qty * 100}g)` : `Qty (${qty} unit)`}:
                         </span>
@@ -253,8 +272,8 @@ export default function CustomerHome({
                         <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => handleQtyChange(p.productId, -1)}
-                            disabled={isOutOfStock || qty <= 1}
-                            className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-700 flex items-center justify-center hover:bg-slate-100 disabled:opacity-40 transition"
+                            disabled={isOutOfStock || (user && isInCart) || qty <= 1}
+                            className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-700 flex items-center justify-center hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
                           >
                             <Minus className="w-3 h-3" />
                           </button>
@@ -265,8 +284,8 @@ export default function CustomerHome({
 
                           <button
                             onClick={() => handleQtyChange(p.productId, 1)}
-                            disabled={isOutOfStock}
-                            className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-700 flex items-center justify-center hover:bg-slate-100 disabled:opacity-40 transition"
+                            disabled={isOutOfStock || (user && isInCart)}
+                            className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-700 flex items-center justify-center hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
                           >
                             <Plus className="w-3 h-3" />
                           </button>
@@ -285,15 +304,26 @@ export default function CustomerHome({
                         {/* Add to Cart Button */}
                         <button
                           onClick={(e) => handleAdd(e, p)}
-                          disabled={isOutOfStock}
+                          disabled={isOutOfStock || (user && isInCart)}
                           className={`px-4 py-2 rounded-xl text-xs font-bold shadow-xs transition flex items-center space-x-1.5 ${
                             isOutOfStock
                               ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                              : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-md'
+                              : user && isInCart
+                                ? 'bg-slate-100 text-slate-500 border border-slate-200 cursor-not-allowed'
+                                : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-md'
                           }`}
                         >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>{user ? 'Add to Cart' : 'Login to Buy'}</span>
+                          {user && isInCart ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Added to Cart</span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>{user ? 'Add to Cart' : 'Login to Buy'}</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>

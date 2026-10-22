@@ -91,6 +91,14 @@ public class AdminController {
     }
 
     /**
+     * Day-by-day sales analytics for a specific product
+     */
+    @GetMapping("/analytics/product-daily-sales/{productId}")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getProductDailySales(@PathVariable int productId) {
+        return ResponseEntity.ok(ApiResponse.ok("Product daily sales loaded", analyticsDao.getProductDailySales(productId)));
+    }
+
+    /**
      * Master System Audit Logs from Table: audit_logs
      */
     @GetMapping("/audit-logs")
@@ -107,5 +115,19 @@ public class AdminController {
             @RequestParam int year,
             @RequestParam int month) {
         return ResponseEntity.ok(ApiResponse.ok("Monthly report generated", analyticsDao.getMonthlyReport(year, month)));
+    }
+
+    /**
+     * Comprehensive Executive Report (Daily, Weekly, Monthly, Yearly)
+     */
+    @GetMapping("/analytics/report")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getAnalyticsReport(
+            @RequestParam(defaultValue = "monthly") String periodType,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer week,
+            @RequestParam(required = false) String date) {
+        return ResponseEntity.ok(ApiResponse.ok("Executive report generated", 
+                analyticsDao.getComprehensiveReport(periodType, year, month, week, date)));
     }
 }

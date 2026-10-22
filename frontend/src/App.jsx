@@ -128,7 +128,6 @@ export default function App() {
         },
       ];
     });
-    setIsCartOpen(true);
   };
 
   const handleUpdateQty = (productId, newQty) => {
@@ -174,7 +173,7 @@ export default function App() {
       {/* Universal Responsive Navbar */}
       <Navbar
         user={user}
-        cartCount={cartItems.reduce((sum, item) => sum + item.quantity, 0)}
+        cartCount={cartItems.length}
         onOpenCart={() => setIsCartOpen(true)}
         onOpenAuth={(mode) => {
           setAuthMode(mode);
@@ -196,7 +195,11 @@ export default function App() {
 
         {/* ROLE 2: OPERATIONAL MANAGER DASHBOARD */}
         {user?.roleName === 'ROLE_MANAGER' && (
-          <ManagerDashboard user={user} onOpenProfile={() => setIsProfileOpen(true)} />
+          <ManagerDashboard 
+            user={user} 
+            onOpenProfile={() => setIsProfileOpen(true)} 
+            onRefreshCatalog={loadCatalog} 
+          />
         )}
 
         {/* ROLE 3: CUSTOMER & PUBLIC GUEST VIEWS */}
@@ -214,6 +217,7 @@ export default function App() {
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 onAddToCart={handleAddToCart}
+                cartItems={cartItems}
                 user={user}
                 onOpenAuth={(mode) => {
                   setAuthMode(mode);

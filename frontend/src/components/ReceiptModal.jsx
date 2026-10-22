@@ -13,11 +13,77 @@ export default function ReceiptModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-8 p-6 sm:p-8 space-y-6">
+    <div className="receipt-modal-backdrop fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+      {/* Print Specific CSS to ensure ONLY 1 sheet of paper is printed */}
+      <style>{`
+        @media print {
+          @page {
+            size: portrait;
+            margin: 8mm;
+          }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            height: auto !important;
+            min-height: auto !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+          }
+          /* Hide main web page background, navigation, and footers */
+          header, main, footer, nav, aside {
+            display: none !important;
+          }
+          #root, #root > div {
+            min-height: 0 !important;
+            height: auto !important;
+            background: transparent !important;
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          /* Hide interactive/decorative web elements */
+          .no-print {
+            display: none !important;
+          }
+          /* Reset modal backdrop */
+          .receipt-modal-backdrop {
+            position: static !important;
+            background: transparent !important;
+            backdrop-filter: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            display: block !important;
+            overflow: visible !important;
+          }
+          /* Format receipt card for single-page paper */
+          .receipt-modal-card {
+            position: static !important;
+            max-width: 480px !important;
+            margin: 0 auto !important;
+            padding: 12px !important;
+            border: 1px solid #94a3b8 !important;
+            border-radius: 8px !important;
+            box-shadow: none !important;
+            background: #ffffff !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .receipt-inner-box {
+            background: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+            padding: 14px !important;
+            margin: 0 !important;
+          }
+        }
+      `}</style>
+
+      <div className="receipt-modal-card relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-8 p-6 sm:p-8 space-y-6">
         
-        {/* Success Header */}
-        <div className="text-center space-y-2">
+        {/* Success Header (Visible on screen, hidden on print to save paper height) */}
+        <div className="no-print text-center space-y-2">
           <div className="w-14 h-14 mx-auto rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shadow-xs">
             <CheckCircle2 className="w-8 h-8" />
           </div>
@@ -30,7 +96,7 @@ export default function ReceiptModal({
         </div>
 
         {/* Receipt Container */}
-        <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 font-mono text-xs">
+        <div className="receipt-inner-box p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 font-mono text-xs">
           
           {/* SuperMart Branding Header */}
           <div className="border-b border-dashed border-slate-300 pb-3 text-center">
@@ -108,13 +174,18 @@ export default function ReceiptModal({
             </div>
           </div>
 
+          {/* Footer Note */}
+          <div className="border-t border-dashed border-slate-300 pt-2 text-center text-[10px] text-slate-400 font-sans">
+            Thank you for shopping with SuperMart! • Please retain this receipt.
+          </div>
+
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex space-x-3">
+        {/* Action Buttons (Hidden when printed) */}
+        <div className="no-print flex space-x-3">
           <button
             onClick={handlePrint}
-            className="flex-1 py-3 rounded-2xl border border-slate-200 bg-white text-slate-800 text-xs font-bold hover:bg-slate-50 transition flex items-center justify-center space-x-1.5 shadow-xs"
+            className="flex-1 py-3 rounded-2xl border border-slate-200 bg-white text-slate-800 text-xs font-bold hover:bg-slate-50 transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             <span>Print Receipt</span>
@@ -122,7 +193,7 @@ export default function ReceiptModal({
 
           <button
             onClick={onClose}
-            className="flex-1 py-3 rounded-2xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition flex items-center justify-center space-x-1.5 shadow-md"
+            className="flex-1 py-3 rounded-2xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition flex items-center justify-center space-x-1.5 shadow-md cursor-pointer"
           >
             <ShoppingBag className="w-4 h-4" />
             <span>Continue Shopping</span>

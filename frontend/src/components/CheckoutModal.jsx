@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, MapPin, CreditCard, Banknote, Tag, Check, AlertCircle, Sparkles, ArrowRight, ShieldCheck } from 'lucide-react';
+import { X, MapPin, CreditCard, Banknote, Tag, Check, AlertCircle, Sparkles, ArrowRight, ShieldCheck, Calendar } from 'lucide-react';
 import { api } from '../api';
 
 export default function CheckoutModal({
@@ -76,9 +76,9 @@ export default function CheckoutModal({
     setErrorMsg('');
     try {
       const payload = {
-        userId: user.userId,
-        recipientName: `${user.firstName} ${user.lastName}`,
-        recipientPhone: user.mobilePhone,
+        userId: user?.userId || 3,
+        recipientName: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Customer',
+        recipientPhone: user?.mobilePhone || '0719876543',
         addressLine1,
         addressLine2,
         city,
@@ -89,11 +89,88 @@ export default function CheckoutModal({
       const newAddressId = res.data.addressId;
       setSelectedAddressId(newAddressId);
       // Reload addresses
-      const updated = await api.getUserAddresses(user.userId);
+      const updated = await api.getUserAddresses(user?.userId || 3);
       setSavedAddresses(updated.data);
       setActiveSection(2); // Automatically advance to Payment Section
     } catch (err) {
       setErrorMsg(err.message || 'Failed to save address');
+    }
+  };
+
+  // Handle expiry date (MM/YY) change
+  const handleExpiryChange = (e) => {
+    const raw = e.target.value;
+    const digits = raw.replace(/\D/g, '').slice(0, 4);
+
+    if (raw.endsWith('/') && digits.length === 1) {
+      setCardExpiry(`0${digits}/`);
+      return;
+    }
+
+    if (raw.endsWith('/') && digits.length <= 2) {
+      setCardExpiry(`${digits}/`);
+      return;
+    }
+
+    if (digits.length >= 3) {
+      setCardExpiry(`${digits.slice(0, 2)}/${digits.slice(2)}`);
+    } else if (digits.length === 2 && !cardExpiry.endsWith('/')) {
+      setCardExpiry(`${digits}/`);
+    } else {
+      setCardExpiry(digits);
+    }
+  };
+
+  // Card details validation
+  const validateCardPayment = () => {
+    if (paymentMethod !== 'CARD_PAYMENT') return true;
+
+    if (!cardNumber || cardNumber.length !== 16) {
+      setErrorMsg('Card number must be exactly 16 digits.');
+      return false;
+    }
+
+    if (!cardExpiry || cardExpiry.length !== 5 || !cardExpiry.includes('/')) {
+      setErrorMsg('Expiry date must be in MM/YY format (e.g. 11/27).');
+      return false;
+    }
+
+    const [mmStr, yyStr] = cardExpiry.split('/');
+    const expMonth = parseInt(mmStr, 10);
+    const expYear = parseInt(yyStr, 10);
+
+    if (isNaN(expMonth) || expMonth < 1 || expMonth > 12) {
+      setErrorMsg('Expiry month must be between 01 and 12.');
+      return false;
+    }
+
+    if (isNaN(expYear) || yyStr.length !== 2) {
+      setErrorMsg('Expiry year must be 2 digits (e.g. 27 for 2027).');
+      return false;
+    }
+
+    const now = new Date();
+    const currentYear2Digit = now.getFullYear() % 100;
+    const currentMonth = now.getMonth() + 1;
+
+    if (expYear < currentYear2Digit || (expYear === currentYear2Digit && expMonth < currentMonth)) {
+      setErrorMsg('Card expiry date cannot be in the past.');
+      return false;
+    }
+
+    if (!cardCvv || cardCvv.length !== 3) {
+      setErrorMsg('CVV / CVC must be exactly 3 digits.');
+      return false;
+    }
+
+    setErrorMsg('');
+    return true;
+  };
+
+  const handleProceedToSection3 = () => {
+    if (validateCardPayment()) {
+      setErrorMsg('');
+      setActiveSection(3);
     }
   };
 
@@ -136,8 +213,7 @@ export default function CheckoutModal({
     }
 
     if (paymentMethod === 'CARD_PAYMENT') {
-      if (!cardNumber || cardNumber.length < 16) {
-        setErrorMsg('Please enter a valid 16-digit card number.');
+      if (!validateCardPayment()) {
         setActiveSection(2);
         return;
       }
@@ -237,7 +313,14 @@ export default function CheckoutModal({
           </button>
 
           <button
-            onClick={() => setActiveSection(3)}
+            onClick={() => {
+              if (!selectedAddressId) {
+                setErrorMsg('Please select or add a delivery address first.');
+                return;
+              }
+              if (activeSection === 2 && !validateCardPayment()) return;
+              setActiveSection(3);
+            }}
             className={`py-3.5 text-xs sm:text-sm font-bold flex items-center justify-center space-x-2 border-b-2 transition ${
               activeSection === 3
                 ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50'
@@ -464,45 +547,67 @@ export default function CheckoutModal({
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="sm:col-span-3">
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">
-                        16-Digit Card Number
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-slate-700 block">
+                          16-Digit Card Number *
+                        </label>
+                        <span className={`text-[11px] font-mono font-medium ${cardNumber.length === 16 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                          {cardNumber.length}/16
+                        </span>
+                      </div>
                       <input
                         type="text"
                         maxLength="16"
-                        placeholder="4111 2222 3333 4444"
+                        placeholder="e.g. 4111222233334444"
                         value={cardNumber}
-                        onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, ''))}
-                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-mono"
+                        onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, '').slice(0, 16))}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-mono tracking-wider"
                       />
                     </div>
 
-                    <div>
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">
-                        Expiry (MM/YY)
-                      </label>
+                    <div className="sm:col-span-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-slate-700 flex items-center space-x-1">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Expiry Date (MM/YY) *</span>
+                        </label>
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          MM/YY (e.g. 11/27)
+                        </span>
+                      </div>
                       <input
                         type="text"
                         maxLength="5"
-                        placeholder="12/28"
+                        placeholder="MM/YY (e.g. 11/27)"
                         value={cardExpiry}
-                        onChange={(e) => setCardExpiry(e.target.value)}
-                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                        onChange={handleExpiryChange}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-mono tracking-wider"
                       />
+                      <span className="text-[10px] text-slate-400 mt-1 block">
+                        2-digit month (01-12) & 2-digit year (e.g. 27)
+                      </span>
                     </div>
 
                     <div>
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">
-                        CVV / CVC
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-slate-700 block">
+                          CVC / CVV *
+                        </label>
+                        <span className={`text-[11px] font-mono font-medium ${cardCvv.length === 3 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                          {cardCvv.length}/3
+                        </span>
+                      </div>
                       <input
                         type="password"
-                        maxLength="4"
+                        maxLength="3"
                         placeholder="123"
                         value={cardCvv}
-                        onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, ''))}
-                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-mono"
+                        onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-mono text-center tracking-widest"
                       />
+                      <span className="text-[10px] text-slate-400 mt-1 block text-center">
+                        3 digits
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -518,7 +623,7 @@ export default function CheckoutModal({
                 </button>
 
                 <button
-                  onClick={() => setActiveSection(3)}
+                  onClick={handleProceedToSection3}
                   className="px-6 py-3 rounded-2xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition flex items-center space-x-1.5"
                 >
                   <span>Proceed to Review & Coupons</span>

@@ -9,6 +9,7 @@ public class TopSellingProduct {
     private String brandName;
     private Integer totalQuantitySold;
     private BigDecimal totalSalesRevenue;
+    private BigDecimal totalProfit;
 
     public TopSellingProduct() {}
 
@@ -29,4 +30,7 @@ public class TopSellingProduct {
 
     public BigDecimal getTotalSalesRevenue() { return totalSalesRevenue; }
     public void setTotalSalesRevenue(BigDecimal totalSalesRevenue) { this.totalSalesRevenue = totalSalesRevenue; }
+
+    public BigDecimal getTotalProfit() { return totalProfit; }
+    public void setTotalProfit(BigDecimal totalProfit) { this.totalProfit = totalProfit; }
 }

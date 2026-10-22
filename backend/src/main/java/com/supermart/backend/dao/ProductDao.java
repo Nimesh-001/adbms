@@ -37,6 +37,7 @@ public class ProductDao {
         p.setProductName(rs.getString("product_name"));
         p.setDescription(rs.getString("description"));
         p.setUnitType(rs.getString("unit_type"));
+        p.setBasePrice(rs.getBigDecimal("base_price"));
         p.setUnitPrice(rs.getBigDecimal("unit_price"));
         p.setCurrentStock(rs.getInt("current_stock"));
         p.setStockStatus(rs.getString("stock_status"));
@@ -117,12 +118,13 @@ public class ProductDao {
      */
     public int addProduct(Product p) {
         String sql = """
-            INSERT INTO products (category_id, brand_id, product_name, description, unit_type, unit_price, current_stock, min_stock_level, image_url, is_featured, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+            INSERT INTO products (category_id, brand_id, product_name, description, unit_type, base_price, unit_price, current_stock, min_stock_level, image_url, is_featured, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
         """;
+        java.math.BigDecimal basePrice = p.getBasePrice() != null ? p.getBasePrice() : java.math.BigDecimal.ZERO;
         return jdbcTemplate.update(sql, 
                 p.getCategoryId(), p.getBrandId(), p.getProductName(), p.getDescription(), 
-                p.getUnitType(), p.getUnitPrice(), p.getCurrentStock(), p.getMinStockLevel(), 
+                p.getUnitType(), basePrice, p.getUnitPrice(), p.getCurrentStock(), p.getMinStockLevel(), 
                 p.getImageUrl(), p.getIsFeatured());
     }
 
@@ -132,12 +134,23 @@ public class ProductDao {
     public int updateProduct(Product p) {
         String sql = """
             UPDATE products 
-            SET category_id = ?, brand_id = ?, product_name = ?, description = ?, unit_type = ?, unit_price = ?, min_stock_level = ?, image_url = ?, is_featured = ?, is_active = ?
+            SET category_id = COALESCE(?, category_id),
+                brand_id = COALESCE(?, brand_id),
+                product_name = COALESCE(?, product_name),
+                description = COALESCE(?, description),
+                unit_type = COALESCE(?, unit_type),
+                base_price = ?,
+                unit_price = ?,
+                min_stock_level = COALESCE(?, min_stock_level, 10),
+                image_url = COALESCE(?, image_url),
+                is_featured = COALESCE(?, is_featured, FALSE),
+                is_active = COALESCE(?, is_active, TRUE)
             WHERE product_id = ?
         """;
+        java.math.BigDecimal basePrice = p.getBasePrice() != null ? p.getBasePrice() : java.math.BigDecimal.ZERO;
         return jdbcTemplate.update(sql,
                 p.getCategoryId(), p.getBrandId(), p.getProductName(), p.getDescription(),
-                p.getUnitType(), p.getUnitPrice(), p.getMinStockLevel(), p.getImageUrl(),
+                p.getUnitType(), basePrice, p.getUnitPrice(), p.getMinStockLevel(), p.getImageUrl(),
                 p.getIsFeatured(), p.getIsActive(), p.getProductId());
     }
 
@@ -146,28 +159,107 @@ public class ProductDao {
         return jdbcTemplate.update(sql, productId);
     }
 
-    public List<Category> getAllCategories() {
-        String sql = "SELECT * FROM categories WHERE is_active = TRUE ORDER BY category_name ASC";
-        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+    public List<Category> getAllCategories(boolean all) {
+        StringBuilder sql = new StringBuilder("""
+            SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.category_id = c.category_id AND p.is_active = TRUE) AS product_count
+            FROM categories c
+        """);
+        if (!all) {
+            sql.append(" WHERE c.is_active = TRUE");
+        }
+        sql.append(" ORDER BY c.category_name ASC");
+        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> {
             Category c = new Category();
             c.setCategoryId(rs.getInt("category_id"));
             c.setCategoryName(rs.getString("category_name"));
             c.setDescription(rs.getString("description"));
             c.setImageUrl(rs.getString("image_url"));
             c.setIsActive(rs.getBoolean("is_active"));
+            c.setProductCount(rs.getInt("product_count"));
             return c;
         });
     }
 
-    public List<Brand> getAllBrands() {
-        String sql = "SELECT * FROM brands ORDER BY brand_name ASC";
-        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+    public List<Category> getAllCategories() {
+        return getAllCategories(false);
+    }
+
+    public int addCategory(Category c) {
+        String sql = "INSERT INTO categories (category_name, description, image_url, is_active) VALUES (?, ?, ?, TRUE)";
+        return jdbcTemplate.update(sql, c.getCategoryName(), c.getDescription(), c.getImageUrl());
+    }
+
+    public int updateCategory(Category c) {
+        String sql = "UPDATE categories SET category_name = ?, description = ?, image_url = ?, is_active = ? WHERE category_id = ?";
+        return jdbcTemplate.update(sql, c.getCategoryName(), c.getDescription(), c.getImageUrl(), 
+                c.getIsActive() != null ? c.getIsActive() : true, c.getCategoryId());
+    }
+
+    public int toggleCategory(int categoryId, boolean active) {
+        String sql = "UPDATE categories SET is_active = ? WHERE category_id = ?";
+        return jdbcTemplate.update(sql, active, categoryId);
+    }
+
+    public boolean deleteCategory(int categoryId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM products WHERE category_id = ? AND is_active = TRUE", Integer.class, categoryId);
+        if (count != null && count > 0) {
+            jdbcTemplate.update("UPDATE categories SET is_active = FALSE WHERE category_id = ?", categoryId);
+        } else {
+            jdbcTemplate.update("DELETE FROM categories WHERE category_id = ?", categoryId);
+        }
+        return true;
+    }
+
+    public List<Brand> getAllBrands(boolean all) {
+        StringBuilder sql = new StringBuilder("""
+            SELECT b.*, (SELECT COUNT(*) FROM products p WHERE p.brand_id = b.brand_id AND p.is_active = TRUE) AS product_count
+            FROM brands b
+        """);
+        if (!all) {
+            sql.append(" WHERE b.is_active = TRUE");
+        }
+        sql.append(" ORDER BY b.brand_name ASC");
+        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> {
             Brand b = new Brand();
             b.setBrandId(rs.getInt("brand_id"));
             b.setBrandName(rs.getString("brand_name"));
             b.setDescription(rs.getString("description"));
             b.setLogoUrl(rs.getString("logo_url"));
+            b.setIsActive(rs.getBoolean("is_active"));
+            b.setProductCount(rs.getInt("product_count"));
             return b;
         });
+    }
+
+    public List<Brand> getAllBrands() {
+        return getAllBrands(false);
+    }
+
+    public int addBrand(Brand b) {
+        String sql = "INSERT INTO brands (brand_name, description, logo_url, is_active) VALUES (?, ?, ?, TRUE)";
+        return jdbcTemplate.update(sql, b.getBrandName(), b.getDescription(), b.getLogoUrl());
+    }
+
+    public int updateBrand(Brand b) {
+        String sql = "UPDATE brands SET brand_name = ?, description = ?, logo_url = ?, is_active = ? WHERE brand_id = ?";
+        return jdbcTemplate.update(sql, b.getBrandName(), b.getDescription(), b.getLogoUrl(), 
+                b.getIsActive() != null ? b.getIsActive() : true, b.getBrandId());
+    }
+
+    public int toggleBrand(int brandId, boolean active) {
+        String sql = "UPDATE brands SET is_active = ? WHERE brand_id = ?";
+        return jdbcTemplate.update(sql, active, brandId);
+    }
+
+    public boolean deleteBrand(int brandId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM products WHERE brand_id = ? AND is_active = TRUE", Integer.class, brandId);
+        if (count != null && count > 0) {
+            jdbcTemplate.update("UPDATE brands SET is_active = FALSE WHERE brand_id = ?", brandId);
+        } else {
+            jdbcTemplate.update("DELETE FROM brands WHERE brand_id = ?", brandId);
+        }
+        return true;
     }
 }

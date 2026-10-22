@@ -14,6 +14,7 @@ public class Product {
     private String productName;
     private String description;
     private String unitType;     // '100g' or 'unit'
+    private BigDecimal basePrice;
     private BigDecimal unitPrice;
     private Integer currentStock;
     private Integer minStockLevel;
@@ -47,6 +48,9 @@ public class Product {
 
     public String getUnitType() { return unitType; }
     public void setUnitType(String unitType) { this.unitType = unitType; }
+
+    public BigDecimal getBasePrice() { return basePrice; }
+    public void setBasePrice(BigDecimal basePrice) { this.basePrice = basePrice; }
 
     public BigDecimal getUnitPrice() { return unitPrice; }
     public void setUnitPrice(BigDecimal unitPrice) { this.unitPrice = unitPrice; }

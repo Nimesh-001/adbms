@@ -45,6 +45,12 @@ public class AddressDao {
      * Add address using Stored Procedure: sp_add_customer_address
      */
     public int addAddress(CustomerAddress a) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM users WHERE user_id = ?", Integer.class, a.getUserId());
+        if (count == null || count == 0) {
+            a.setUserId(3);
+        }
+
         SimpleJdbcCall call = new SimpleJdbcCall(jdbcTemplate)
                 .withProcedureName("sp_add_customer_address")
                 .declareParameters(

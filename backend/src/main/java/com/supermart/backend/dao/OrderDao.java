@@ -84,13 +84,14 @@ public class OrderDao {
 
         if (orderId != null && orderId > 0 && req.getItems() != null) {
             String insertItemSql = """
-                INSERT INTO order_items (order_id, product_id, quantity, unit_price, item_total)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO order_items (order_id, product_id, quantity, unit_price, base_price, item_total)
+                SELECT ?, p.product_id, ?, ?, COALESCE(p.base_price, 0.00), ?
+                FROM products p WHERE p.product_id = ?
             """;
             for (CheckoutItemDto item : req.getItems()) {
                 BigDecimal itemTotal = item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
                 // Triggers trg_after_order_item_insert_deduct_stock and trg_before_product_stock_check fire automatically here!
-                jdbcTemplate.update(insertItemSql, orderId, item.getProductId(), item.getQuantity(), item.getUnitPrice(), itemTotal);
+                jdbcTemplate.update(insertItemSql, orderId, item.getQuantity(), item.getUnitPrice(), itemTotal, item.getProductId());
             }
         }
 
@@ -138,6 +139,7 @@ public class OrderDao {
             item.setImageUrl(rs.getString("image_url"));
             item.setQuantity(rs.getInt("quantity"));
             item.setUnitPrice(rs.getBigDecimal("unit_price"));
+            item.setBasePrice(rs.getBigDecimal("base_price"));
             item.setItemTotal(rs.getBigDecimal("item_total"));
             return item;
         }, orderId);

@@ -11,6 +11,7 @@ public class OrderItem {
     private String imageUrl;
     private Integer quantity;
     private BigDecimal unitPrice;
+    private BigDecimal basePrice;
     private BigDecimal itemTotal;
 
     public OrderItem() {}
@@ -38,6 +39,9 @@ public class OrderItem {
 
     public BigDecimal getUnitPrice() { return unitPrice; }
     public void setUnitPrice(BigDecimal unitPrice) { this.unitPrice = unitPrice; }
+
+    public BigDecimal getBasePrice() { return basePrice; }
+    public void setBasePrice(BigDecimal basePrice) { this.basePrice = basePrice; }
 
     public BigDecimal getItemTotal() { return itemTotal; }
     public void setItemTotal(BigDecimal itemTotal) { this.itemTotal = itemTotal; }

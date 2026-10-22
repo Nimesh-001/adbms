@@ -5,6 +5,8 @@ public class Brand {
     private String brandName;
     private String description;
     private String logoUrl;
+    private Integer productCount;
+    private Boolean isActive;
 
     public Brand() {}
 
@@ -19,4 +21,10 @@ public class Brand {
 
     public String getLogoUrl() { return logoUrl; }
     public void setLogoUrl(String logoUrl) { this.logoUrl = logoUrl; }
+
+    public Integer getProductCount() { return productCount; }
+    public void setProductCount(Integer productCount) { this.productCount = productCount; }
+
+    public Boolean getIsActive() { return isActive; }
+    public void setIsActive(Boolean isActive) { this.isActive = isActive; }
 }

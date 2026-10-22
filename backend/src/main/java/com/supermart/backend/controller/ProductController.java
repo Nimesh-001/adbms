@@ -102,12 +102,80 @@ public class ProductController {
     }
 
     @GetMapping("/categories")
-    public ResponseEntity<ApiResponse<List<Category>>> getCategories() {
-        return ResponseEntity.ok(ApiResponse.ok("Categories loaded", productDao.getAllCategories()));
+    public ResponseEntity<ApiResponse<List<Category>>> getCategories(
+            @RequestParam(required = false, defaultValue = "false") boolean all) {
+        return ResponseEntity.ok(ApiResponse.ok("Categories loaded", productDao.getAllCategories(all)));
+    }
+
+    @PostMapping("/categories")
+    public ResponseEntity<ApiResponse<String>> addCategory(@RequestBody Category category) {
+        if (category.getCategoryName() == null || category.getCategoryName().isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Category name is required"));
+        }
+        productDao.addCategory(category);
+        return ResponseEntity.ok(ApiResponse.ok("Category added successfully"));
+    }
+
+    @PutMapping("/categories/{id}")
+    public ResponseEntity<ApiResponse<String>> updateCategory(@PathVariable int id, @RequestBody Category category) {
+        category.setCategoryId(id);
+        productDao.updateCategory(category);
+        return ResponseEntity.ok(ApiResponse.ok("Category updated successfully"));
+    }
+
+    @PatchMapping("/categories/{id}/toggle")
+    public ResponseEntity<ApiResponse<String>> toggleCategory(@PathVariable int id, @RequestParam boolean active) {
+        productDao.toggleCategory(id, active);
+        String msg = active ? "Category enabled successfully" : "Category hidden successfully";
+        return ResponseEntity.ok(ApiResponse.ok(msg));
+    }
+
+    @DeleteMapping("/categories/{id}")
+    public ResponseEntity<ApiResponse<String>> deleteCategory(@PathVariable int id) {
+        try {
+            productDao.deleteCategory(id);
+            return ResponseEntity.ok(ApiResponse.ok("Category removed successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Cannot delete category: " + e.getMessage()));
+        }
     }
 
     @GetMapping("/brands")
-    public ResponseEntity<ApiResponse<List<Brand>>> getBrands() {
-        return ResponseEntity.ok(ApiResponse.ok("Brands loaded", productDao.getAllBrands()));
+    public ResponseEntity<ApiResponse<List<Brand>>> getBrands(
+            @RequestParam(required = false, defaultValue = "false") boolean all) {
+        return ResponseEntity.ok(ApiResponse.ok("Brands loaded", productDao.getAllBrands(all)));
+    }
+
+    @PostMapping("/brands")
+    public ResponseEntity<ApiResponse<String>> addBrand(@RequestBody Brand brand) {
+        if (brand.getBrandName() == null || brand.getBrandName().isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Brand name is required"));
+        }
+        productDao.addBrand(brand);
+        return ResponseEntity.ok(ApiResponse.ok("Brand added successfully"));
+    }
+
+    @PutMapping("/brands/{id}")
+    public ResponseEntity<ApiResponse<String>> updateBrand(@PathVariable int id, @RequestBody Brand brand) {
+        brand.setBrandId(id);
+        productDao.updateBrand(brand);
+        return ResponseEntity.ok(ApiResponse.ok("Brand updated successfully"));
+    }
+
+    @PatchMapping("/brands/{id}/toggle")
+    public ResponseEntity<ApiResponse<String>> toggleBrand(@PathVariable int id, @RequestParam boolean active) {
+        productDao.toggleBrand(id, active);
+        String msg = active ? "Brand enabled successfully" : "Brand hidden successfully";
+        return ResponseEntity.ok(ApiResponse.ok(msg));
+    }
+
+    @DeleteMapping("/brands/{id}")
+    public ResponseEntity<ApiResponse<String>> deleteBrand(@PathVariable int id) {
+        try {
+            productDao.deleteBrand(id);
+            return ResponseEntity.ok(ApiResponse.ok("Brand removed successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
     }
 }

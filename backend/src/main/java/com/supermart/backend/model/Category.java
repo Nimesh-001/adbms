@@ -6,6 +6,7 @@ public class Category {
     private String description;
     private String imageUrl;
     private Boolean isActive;
+    private Integer productCount;
 
     public Category() {}
 
@@ -23,4 +24,7 @@ public class Category {
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
+
+    public Integer getProductCount() { return productCount; }
+    public void setProductCount(Integer productCount) { this.productCount = productCount; }
 }

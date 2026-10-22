@@ -39,8 +39,25 @@ export const api = {
     return request(`/products?${params.toString()}`);
   },
   getProductById: (id) => request(`/products/${id}`),
-  getCategories: () => request('/products/categories'),
-  getBrands: () => request('/products/brands'),
+  getCategories: (all = false) => request(`/products/categories${all ? '?all=true' : ''}`),
+  addCategory: (payload) =>
+    request('/products/categories', { method: 'POST', body: JSON.stringify(payload) }),
+  updateCategory: (id, payload) =>
+    request(`/products/categories/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  toggleCategory: (id, active) =>
+    request(`/products/categories/${id}/toggle?active=${active}`, { method: 'PATCH' }),
+  deleteCategory: (id) =>
+    request(`/products/categories/${id}`, { method: 'DELETE' }),
+
+  getBrands: (all = false) => request(`/products/brands${all ? '?all=true' : ''}`),
+  addBrand: (payload) =>
+    request('/products/brands', { method: 'POST', body: JSON.stringify(payload) }),
+  updateBrand: (id, payload) =>
+    request(`/products/brands/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  toggleBrand: (id, active) =>
+    request(`/products/brands/${id}/toggle?active=${active}`, { method: 'PATCH' }),
+  deleteBrand: (id) =>
+    request(`/products/brands/${id}`, { method: 'DELETE' }),
   getLowStockAlerts: () => request('/products/alerts'),
   restockProduct: (userId, productId, additionalStock) =>
     request('/products/restock', {
@@ -82,6 +99,7 @@ export const api = {
   getKpis: () => request('/admin/analytics/kpis'),
   getDailySales: () => request('/admin/analytics/daily-sales'),
   getTopSelling: () => request('/admin/analytics/top-selling'),
+  getProductDailySales: (productId) => request(`/admin/analytics/product-daily-sales/${productId}`),
   getAuditLogs: (limit = 50) => request(`/admin/audit-logs?limit=${limit}`),
   getManagers: () => request('/admin/managers'),
   createManager: (adminId, payload) =>
@@ -93,4 +111,8 @@ export const api = {
     request(`/admin/managers/${id}/toggle?active=${active}`, { method: 'PATCH' }),
   getMonthlyReport: (year, month) =>
     request(`/admin/monthly-report?year=${year}&month=${month}`),
+  getAnalyticsReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/admin/analytics/report?${qs}`);
+  },
 };

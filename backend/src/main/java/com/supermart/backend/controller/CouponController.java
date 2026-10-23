@@ -84,4 +84,11 @@ public class CouponController {
         couponDao.toggleCouponStatus(id, active);
         return ResponseEntity.ok(ApiResponse.ok("Coupon status updated"));
     }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<String>> updateCoupon(@PathVariable int id, @RequestBody Coupon coupon) {
+        coupon.setCouponId(id);
+        couponDao.updateCoupon(coupon);
+        return ResponseEntity.ok(ApiResponse.ok("Coupon updated successfully"));
+    }
 }

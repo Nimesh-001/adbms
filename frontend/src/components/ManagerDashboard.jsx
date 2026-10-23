@@ -49,8 +49,9 @@ export default function ManagerDashboard({ user, onOpenProfile, onRefreshCatalog
   const [newProductMinStock, setNewProductMinStock] = useState(15);
   const [newProductImage, setNewProductImage] = useState('');
 
-  // Create Coupon modal state
+  // Create / Edit Coupon modal state
   const [showCreateCouponModal, setShowCreateCouponModal] = useState(false);
+  const [editingCoupon, setEditingCoupon] = useState(null);
   const [newCouponCode, setNewCouponCode] = useState('');
   const [newCouponDesc, setNewCouponDesc] = useState('');
   const [newCouponMinOrder, setNewCouponMinOrder] = useState('3000');
@@ -299,8 +300,28 @@ export default function ManagerDashboard({ user, onOpenProfile, onRefreshCatalog
     }
   };
 
-  // Handle Create Coupon
-  const handleCreateCouponSubmit = async (e) => {
+  const openCreateCoupon = () => {
+    setEditingCoupon(null);
+    setNewCouponCode('');
+    setNewCouponDesc('');
+    setNewCouponMinOrder('3000');
+    setNewCouponDiscount('10');
+    setNewCouponFreeDel(true);
+    setShowCreateCouponModal(true);
+  };
+
+  const openEditCoupon = (coupon) => {
+    setEditingCoupon(coupon);
+    setNewCouponCode(coupon.couponCode || '');
+    setNewCouponDesc(coupon.description || '');
+    setNewCouponMinOrder(String(coupon.minOrderAmount || 0));
+    setNewCouponDiscount(String(coupon.discountPercentage || 0));
+    setNewCouponFreeDel(Boolean(coupon.freeDelivery));
+    setShowCreateCouponModal(true);
+  };
+
+  // Handle Create or Edit Coupon
+  const handleCouponSubmit = async (e) => {
     e.preventDefault();
     try {
       const now = new Date();
@@ -313,16 +334,36 @@ export default function ManagerDashboard({ user, onOpenProfile, onRefreshCatalog
         minOrderAmount: Number(newCouponMinOrder),
         discountPercentage: Number(newCouponDiscount),
         freeDelivery: newCouponFreeDel,
-        validFrom: now.toISOString(),
-        validUntil: nextYear.toISOString(),
+        validFrom: editingCoupon?.validFrom || now.toISOString(),
+        validUntil: editingCoupon?.validUntil || nextYear.toISOString(),
       };
-      await api.createCoupon(payload);
+
+      if (editingCoupon) {
+        await api.updateCoupon(editingCoupon.couponId, payload);
+      } else {
+        await api.createCoupon(payload);
+      }
+
       setShowCreateCouponModal(false);
+      setEditingCoupon(null);
       setNewCouponCode('');
       setNewCouponDesc('');
       loadData();
     } catch (err) {
-      alert(err.message || 'Failed to create coupon');
+      alert(err.message || (editingCoupon ? 'Failed to update coupon' : 'Failed to create coupon'));
+    }
+  };
+
+  // Handle Toggle Coupon Active / Inactive
+  const handleToggleCoupon = async (coupon) => {
+    const nextActive = !coupon.isActive;
+    const actionText = nextActive ? 'enable (activate)' : 'disable (deactivate)';
+    if (!window.confirm(`Are you sure you want to ${actionText} coupon "${coupon.couponCode}"?`)) return;
+    try {
+      await api.toggleCoupon(coupon.couponId, nextActive);
+      await loadData();
+    } catch (err) {
+      alert(err.message || `Failed to ${actionText} coupon`);
     }
   };
 
@@ -858,8 +899,8 @@ export default function ManagerDashboard({ user, onOpenProfile, onRefreshCatalog
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-bold text-slate-900">System Promotional Coupons</h3>
             <button
-              onClick={() => setShowCreateCouponModal(true)}
-              className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition shadow-xs flex items-center space-x-1.5"
+              onClick={openCreateCoupon}
+              className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition shadow-xs flex items-center space-x-1.5 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Create New Coupon</span>
@@ -882,6 +923,37 @@ export default function ManagerDashboard({ user, onOpenProfile, onRefreshCatalog
                   <div>Min Order: <span className="font-bold text-slate-900">Rs. {c.minOrderAmount}</span></div>
                   <div>Discount: <span className="font-bold text-slate-900">{c.discountPercentage}%</span></div>
                   <div>Free Delivery: <span className="font-bold text-slate-900">{c.freeDelivery ? 'YES' : 'NO'}</span></div>
+                </div>
+
+                {/* Coupon Actions: Edit and Enable / Disable */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <button
+                    onClick={() => openEditCoupon(c)}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <Edit2 className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Edit</span>
+                  </button>
+
+                  {c.isActive ? (
+                    <button
+                      onClick={() => handleToggleCoupon(c)}
+                      className="px-3 py-1.5 rounded-xl border border-amber-200 text-amber-700 hover:bg-amber-50 font-bold text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+                      title="Disable this coupon"
+                    >
+                      <EyeOff className="w-3.5 h-3.5" />
+                      <span>Disable</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleToggleCoupon(c)}
+                      className="px-3 py-1.5 rounded-xl border border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+                      title="Enable this coupon"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Enable</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -1242,9 +1314,11 @@ export default function ManagerDashboard({ user, onOpenProfile, onRefreshCatalog
       {showCreateCouponModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4">
-            <h3 className="text-base font-bold text-slate-900">Create Promotional Coupon</h3>
+            <h3 className="text-base font-bold text-slate-900">
+              {editingCoupon ? 'Edit Promotional Coupon' : 'Create Promotional Coupon'}
+            </h3>
 
-            <form onSubmit={handleCreateCouponSubmit} className="space-y-3 text-xs">
+            <form onSubmit={handleCouponSubmit} className="space-y-3 text-xs">
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Coupon Code *</label>
                 <input
@@ -1310,16 +1384,19 @@ export default function ManagerDashboard({ user, onOpenProfile, onRefreshCatalog
               <div className="flex justify-end space-x-2 pt-3">
                 <button
                   type="button"
-                  onClick={() => setShowCreateCouponModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 font-semibold text-slate-600 hover:bg-slate-50"
+                  onClick={() => {
+                    setShowCreateCouponModal(false);
+                    setEditingCoupon(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-slate-200 font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-xs"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-xs cursor-pointer"
                 >
-                  Create Coupon
+                  {editingCoupon ? 'Update Coupon' : 'Create Coupon'}
                 </button>
               </div>
             </form>

@@ -85,13 +85,25 @@ public class OrderDao {
         if (orderId != null && orderId > 0 && req.getItems() != null) {
             String insertItemSql = """
                 INSERT INTO order_items (order_id, product_id, quantity, unit_price, base_price, item_total)
-                SELECT ?, p.product_id, ?, ?, COALESCE(p.base_price, 0.00), ?
-                FROM products p WHERE p.product_id = ?
+                VALUES (?, ?, ?, ?, ?, ?)
             """;
             for (CheckoutItemDto item : req.getItems()) {
                 BigDecimal itemTotal = item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
+                BigDecimal basePrice = BigDecimal.ZERO;
+                try {
+                    BigDecimal bp = jdbcTemplate.queryForObject(
+                        "SELECT COALESCE(base_price, 0.00) FROM products WHERE product_id = ?",
+                        BigDecimal.class,
+                        item.getProductId()
+                    );
+                    if (bp != null) {
+                        basePrice = bp;
+                    }
+                } catch (Exception ignored) {
+                    basePrice = BigDecimal.ZERO;
+                }
                 // Triggers trg_after_order_item_insert_deduct_stock and trg_before_product_stock_check fire automatically here!
-                jdbcTemplate.update(insertItemSql, orderId, item.getQuantity(), item.getUnitPrice(), itemTotal, item.getProductId());
+                jdbcTemplate.update(insertItemSql, orderId, item.getProductId(), item.getQuantity(), item.getUnitPrice(), basePrice, itemTotal);
             }
         }
 

@@ -78,6 +78,8 @@ export const api = {
   },
   createCoupon: (payload) =>
     request('/coupons', { method: 'POST', body: JSON.stringify(payload) }),
+  updateCoupon: (id, payload) =>
+    request(`/coupons/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   toggleCoupon: (id, active) =>
     request(`/coupons/${id}/toggle?active=${active}`, { method: 'PATCH' }),
 

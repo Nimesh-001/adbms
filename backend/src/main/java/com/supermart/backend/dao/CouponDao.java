@@ -68,4 +68,19 @@ public class CouponDao {
         String sql = "UPDATE coupons SET is_active = ? WHERE coupon_id = ?";
         return jdbcTemplate.update(sql, isActive, couponId);
     }
+
+    public int updateCoupon(Coupon c) {
+        String sql = """
+            UPDATE coupons
+            SET coupon_code = ?,
+                description = ?,
+                min_order_amount = ?,
+                discount_percentage = ?,
+                free_delivery = ?
+            WHERE coupon_id = ?
+        """;
+        return jdbcTemplate.update(sql,
+                c.getCouponCode(), c.getDescription(), c.getMinOrderAmount(),
+                c.getDiscountPercentage(), c.getFreeDelivery(), c.getCouponId());
+    }
 }

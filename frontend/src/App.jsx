@@ -235,7 +235,7 @@ export default function App() {
                   <div>
                     <h2 className="text-xl font-bold text-slate-900">Your Order History</h2>
                     <span className="text-xs text-slate-500">
-                      Queried directly from MySQL View <code>v_customer_order_history</code>
+                      Track and review all your past grocery orders and receipts
                     </span>
                   </div>
                 </div>
@@ -299,10 +299,7 @@ export default function App() {
       {/* Universal Footer */}
       <footer className="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-400">
         <p className="font-semibold text-slate-700">
-          SuperMart Online Management System — ICT3222 Advanced Database Management Systems Mini Project
-        </p>
-        <p className="mt-1">
-          Pure RDBMS Backend (Spring Boot + Pure JDBC) • React + Tailwind CSS • MySQL 8.0+
+          ©SuperMart Online Management System
         </p>
       </footer>
 

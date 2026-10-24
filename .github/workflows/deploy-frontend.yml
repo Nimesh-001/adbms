@@ -32,7 +32,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: cd frontend && npm ci
+        run: cd frontend && npm install
 
       - name: Build frontend
         env:
@@ -41,6 +41,8 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

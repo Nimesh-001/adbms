@@ -248,3 +248,270 @@ The SuperMart audit system records all critical administrative, managerial, and 
 - **Timestamping & Timezone**: Timestamps are stored in UTC format in the database and formatted directly to the user's local Sri Lankan time (`Asia/Colombo`, UTC+05:30) in the dashboard.
 - **Data Lifecycle**: Audit logs are retained for 180 days for statutory regulatory compliance and automatically purged thereafter via `evt_monthly_purge_old_audit_logs`.
 
+---
+
+## 13. Architectural Decision: Why SuperMart was Developed WITHOUT an ORM Tool
+
+### A. Is SuperMart Developed Without an ORM Tool?
+**YES.** The backend was built intentionally **without** an Object-Relational Mapping (ORM) framework like Hibernate or Spring Data JPA. Instead, it utilizes **Spring Native JDBC (`JdbcTemplate` and `SimpleJdbcCall`)**.
+
+### B. ORM Tool vs. Native JDBC (`JdbcTemplate`) Comparison
+
+| Architectural Dimension | Using an ORM Tool (e.g., Hibernate, JPA) | SuperMart Architecture (Native `JdbcTemplate`) |
+| :--- | :--- | :--- |
+| **SQL Execution** | Auto-generates queries behind the scenes via entity annotations (`@Entity`, `@Table`). | **Developer-Controlled Native SQL**: Explicitly crafts queries, joins, and procedure calls. |
+| **Database Views** | Clunky; ORMs attempt to map tables and reconstruct joins in Java memory. | **Direct & Native**: Queries database views (`v_active_product_catalog`, `v_top_selling_products`) directly. |
+| **Stored Procedures** | Complex and difficult configuration; bypasses normal entity lifecycle. | **First-Class Support**: Executes procedures cleanly via `SimpleJdbcCall` (`sp_place_order_transaction`). |
+| **Database Triggers** | **Cache Inconsistency Risk**: When triggers modify rows (e.g. stock deduction), the ORM's in-memory session cache does not detect it, causing stale data bugs. | **100% Reliable**: Reads and writes go straight to MySQL; trigger side-effects are immediately visible. |
+| **Performance & Overhead** | Entity dirty checking, caching overhead, startup delay, and risk of accidental N+1 query loops. | **High Performance & Lightweight**: Direct JDBC communication with zero query abstraction overhead. |
+
+### C. Why NOT Using an ORM is a Major Advantage for ADBMS (ICT3222)
+1. **Demonstrates True Database Engineering Competence**:
+   - An ORM abstracts database design away. By using native JDBC, the project proves that transaction management, constraints, stock calculations, and auditing reside securely **inside the MySQL database engine**, not just in Java application code.
+2. **First-Class Stored Procedure & Routine Integration**:
+   - The system easily invokes all 6 Stored Procedures and Stored Functions without fighting an ORM mapping engine.
+3. **Flawless Trigger Synchronization**:
+   - When MySQL triggers (`trg_after_order_item_insert_deduct_stock`, `trg_after_product_stock_update_alert`) fire, subsequent `JdbcTemplate` queries immediately reflect the updated database state without needing cache eviction.
+
+### D. Model Viva Answer for the Examiner
+> **Lecturer:** *"Did you use Hibernate or Spring Data JPA (ORM) in your backend?"*  
+> **Student Answer:**  
+> *"No, sir/madam. We deliberately chose **not** to use an ORM like Hibernate. We implemented **Spring `JdbcTemplate` and `SimpleJdbcCall`** with native SQL.  
+> In an Advanced DBMS course, our goal is to highlight database-level capabilities: our **6 Stored Procedures**, **6 Stored Functions**, **6 Views**, and **6 Triggers**.  
+> ORMs often abstract away SQL, conflict with database triggers due to in-memory caching, and complicate stored procedure execution. By avoiding an ORM, our backend serves as a clean, high-performance bridge communicating directly with our MySQL database objects."*
+
+---
+
+## 14. System Architecture Explained: 3-Tier vs. MVC Architecture
+
+### A. What Architecture Does SuperMart Use?
+**SuperMart uses a 3-Tier Client-Server Architecture** structured internally with a **Decoupled Layered Design Pattern (Controller → DAO → Database)**.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ TIER 1: PRESENTATION TIER (Client Side)                     │
+│ React.js (Single Page Application via Vite)                 │
+│ • Customer Home & Cart Drawer                               │
+│ • Operational Manager Dashboard                             │
+│ • Super Admin Dashboard & Audit Trail Viewer                │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ HTTP / JSON REST APIs (Axios)
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│ TIER 2: APPLICATION & BUSINESS LOGIC TIER (Server Side)     │
+│ Spring Boot 3 Java Framework                                │
+│ • Controllers (REST API Endpoints & Request Validation)     │
+│ • DAOs (Data Access Objects via Spring JdbcTemplate)        │
+│ • Security / Session Authentication                         │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ JDBC Native Connection (TCP 3306)
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│ TIER 3: DATA TIER (Database Engine)                         │
+│ MySQL 8.0 Relational DBMS                                   │
+│ • Tables with Foreign Keys & B-Tree Indexes                 │
+│ • 6 Views, 6 Stored Procedures, 6 Functions                 │
+│ • 6 Triggers & 6 Scheduled Events                           │
+│ • ACID Transactions & Audit Trail Ledger                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Strong Reasons Why We Chose 3-Tier Architecture:
+1. **Security & Least Privilege:** The frontend client browser NEVER communicates directly with the MySQL database. Database credentials, connection pools, and database user roles (`supermart_admin`, `supermart_manager`, `supermart_customer`) are securely guarded on the server.
+2. **Separation of Concerns:** Changes to the user interface (e.g., redesigning React components) require zero changes to the backend or database queries.
+3. **Scalability & Maintainability:** If traffic surges, we can scale the Spring Boot web servers horizontally without modifying the underlying database schema.
+4. **Data Integrity Centricity (ADBMS Goal):** Core transactional rules and auditing logic reside inside MySQL stored procedures and triggers, ensuring that data integrity is maintained regardless of which application connects to it.
+
+---
+
+### B. What is the Difference Between 3-Tier Architecture and MVC Architecture?
+
+Lecturers frequently ask this comparison question. Here is the clear, exact difference:
+
+| Comparison Point | 3-Tier Architecture (Macro / Deployment Architecture) | MVC Architecture (Micro / Software Code Pattern) |
+| :--- | :--- | :--- |
+| **What it describes** | **Physical & Logical separation across the network**: Divides the entire system into 3 distinct machines or layers: **Client (Browser) ↔ Application Server (Backend) ↔ Database Server (DBMS)**. | **Code organization pattern within an application**: Divides internal software code into **Model (Data), View (UI), and Controller (Routing)**. |
+| **Scope** | Covers the entire full-stack ecosystem (Hardware, Network, Processes). | Covers the software structure inside the code repository. |
+| **Location** | Distributed across Client device, Web server, and Database server. | Can exist entirely within a single tier or application. |
+| **How SuperMart uses it** | SuperMart runs on a **3-Tier Architecture**. | Inside our system, the **MVC concept is implemented across tiers**: <br>• **View**: React.js JSX components rendered in the user's browser.<br>• **Controller**: Spring Boot `@RestController` classes handling HTTP REST endpoints.<br>• **Model**: Plain Old Java Objects (POJOs) representing domain entities in Java. |
+
+---
+
+### C. What is a "Model", How Did We Create It, and How Does It Work?
+
+#### 1. What is a Model?
+A **Model** is a Java class (POJO - Plain Old Java Object) that represents real-world data and mirrors database structures in application memory. For example: `Product.java`, `Order.java`, `User.java`, `AuditLog.java`, `Coupon.java`.
+
+#### 2. How We Created the Model (Simple Code Example):
+In `backend/src/main/java/com/supermart/backend/model/Product.java`:
+```java
+public class Product {
+    private Integer productId;
+    private String productName;
+    private BigDecimal unitPrice;
+    private Integer currentStock;
+    private String categoryName;
+    private String brandName;
+
+    // Default Constructor
+    public Product() {}
+
+    // Getters and Setters (allows controlled reading and writing of data)
+    public Integer getProductId() { return productId; }
+    public void setProductId(Integer productId) { this.productId = productId; }
+    
+    public String getProductName() { return productName; }
+    public void setProductName(String productName) { this.productName = productName; }
+    
+    public BigDecimal getUnitPrice() { return unitPrice; }
+    public void setUnitPrice(BigDecimal unitPrice) { this.unitPrice = unitPrice; }
+    
+    public Integer getCurrentStock() { return currentStock; }
+    public void setCurrentStock(Integer currentStock) { this.currentStock = currentStock; }
+}
+```
+
+#### 3. How Does the Model Work in the System? (Step-by-Step Flow):
+1. **Database → Java (RowMapper):** When `ProductDao.java` executes `SELECT * FROM v_active_product_catalog`, MySQL returns a tabular `ResultSet`. The Spring `RowMapper` extracts each column value and injects it into a new `Product` Model instance:
+   ```java
+   (rs, rowNum) -> {
+       Product p = new Product();
+       p.setProductId(rs.getInt("product_id"));
+       p.setProductName(rs.getString("product_name"));
+       p.setUnitPrice(rs.getBigDecimal("unit_price"));
+       p.setCurrentStock(rs.getInt("current_stock"));
+       return p;
+   }
+   ```
+2. **Java → JSON (Controller):** `ProductController.java` returns this `Product` model. Spring Boot automatically serializes the Java Model into a lightweight JSON string.
+3. **JSON → Frontend (React):** The React frontend receives the JSON object and displays it inside the product cards on the Customer Home page.
+
+---
+
+## 15. Concurrency Control, Locking & Race Condition Prevention
+
+In multi-user supermarkets, concurrency issues arise when two or more customers attempt to purchase the exact same remaining stock simultaneously.
+
+### A. The Concurrency Problem: The "Overselling" Race Condition
+*Scenario:* Product "Fresh Milk" has only **1 unit** left in stock.  
+Customer A and Customer B both click "Place Order" at the exact same millisecond. If the system does not handle concurrency, both orders could be confirmed, resulting in **negative stock (-1)** and overselling.
+
+### B. How SuperMart Solves Concurrency: Multi-Level Protection
+SuperMart prevents race conditions through three synchronized database mechanisms:
+
+1. **InnoDB Row-Level Locking:**
+   - MySQL InnoDB engine automatically applies an exclusive row-level lock (`X-Lock`) on the targeted `products` table row during DML updates.
+   - When Customer A's checkout transaction begins decrementing stock, Customer B's query must wait in queue until Customer A's transaction commits.
+
+2. **Atomic SQL Decrement inside Trigger:**
+   - Instead of reading stock into Java memory, subtracting 1, and writing it back (`stock = stock - 1`), our database trigger `trg_after_order_item_insert_deduct_stock` executes an atomic database operation:
+     ```sql
+     UPDATE products 
+     SET current_stock = current_stock - NEW.quantity 
+     WHERE product_id = NEW.product_id;
+     ```
+   - In MySQL, atomic `UPDATE` operations are indivisible and serialized by the storage engine.
+
+3. **Strict Negative Stock Barrier (Integrity Trigger):**
+   - Even if concurrent requests race, trigger `trg_before_product_stock_check` inspects the resulting stock level:
+     ```sql
+     IF NEW.current_stock < 0 THEN
+         SIGNAL SQLSTATE '45000'
+         SET MESSAGE_TEXT = 'Integrity Error: Stock level cannot be negative!';
+     END IF;
+     ```
+   - The second transaction is instantly aborted with an exception, the `SQLEXCEPTION` exit handler fires `ROLLBACK`, and Customer B is safely notified that the product is sold out without corrupting data.
+
+4. **MySQL Transaction Isolation Level:**
+   - SuperMart operates on MySQL's default **`REPEATABLE READ`** isolation level with InnoDB MVCC (Multi-Version Concurrency Control). This prevents "Dirty Reads" and "Non-Repeatable Reads" while maintaining high throughput.
+
+---
+
+## 16. Summary of How All Database Objects Work Together in Harmony
+
+| Component Type | Quantity | Execution Model | Role in SuperMart System |
+| :--- | :---: | :--- | :--- |
+| **Views** | 6 | Read-Only Virtual Tables | Pre-join multi-table data (catalog, top selling, low stock, history) to provide fast, clean queries without complex repetitive joins in application code. |
+| **Stored Functions** | 6 | Deterministic Scalar Routines | Encapsulate mathematical and validation formulas (`delivery fee`, `coupon discount`, `NIC regex`, `lifetime spending`) that can be called inline within queries and procedures. |
+| **Stored Procedures** | 6 | Compiled Multi-Step Routines | Execute multi-statement business transactions (`register customer`, `create manager`, `restock`, `place order`, `monthly report`) directly inside MySQL with error handlers. |
+| **Triggers** | 6 | Event-Driven DML Interceptors | Automatically enforce data integrity (prevent negative stock) and maintain automated audit logs whenever rows are inserted or updated in `orders`, `products`, or `users`. |
+| **Scheduled Events** | 6 | Background Autonomous Cron Jobs | Manage housekeeping tasks (deactivate expired coupons, resolve restock alerts, generate daily audit snapshots, purge old logs) without human intervention. |
+| **Audit Logs** | Central Table | Append-Only Ledger | Records who changed what, when, and the before/after details for price modifications, order checkouts, status progressions, and admin operations. |
+| **ACID Transactions** | Multi-Table | All-or-Nothing Commit/Rollback | Enforces that order creation, payment creation, stock deduction, and audit logging either succeed together or completely abort with zero residual state. |
+
+---
+
+## 17. Top 15 Examiner & Viva Questions & Model Answers
+
+### Q1: Why did you choose 3-Tier Architecture instead of a Monolithic application?
+**Answer:**  
+*"3-Tier architecture separates the Presentation (React), Application Logic (Spring Boot), and Data Storage (MySQL). This provides three major benefits:  
+1. **Security:** The database is completely protected behind a firewall; clients never have direct DB access.  
+2. **Independent Scalability:** We can scale or update the user interface without altering the backend or database schemas.  
+3. **Database Independence:** Centralizing rules in MySQL stored procedures and triggers ensures business integrity is preserved regardless of what client connects."*
+
+### Q2: What is the difference between 3-Tier Architecture and MVC?
+**Answer:**  
+*"3-Tier architecture is a physical deployment architecture describing where code runs across hardware (Browser ↔ Server ↔ Database). MVC is a software design pattern describing how code is organized inside the software (Model = data structure, View = UI, Controller = routing/orchestration). In our system, the 3 tiers contain an MVC pattern where React acts as the View, Spring Boot Controllers act as the Controller, and our Java POJOs act as Models."*
+
+### Q3: What is a Model in your Spring Boot application?
+**Answer:**  
+*"A Model is a Plain Old Java Object (POJO) that encapsulates entity attributes with private fields, getters, and setters. When our DAO layer queries MySQL using `JdbcTemplate`, a `RowMapper` extracts columns from the database `ResultSet` and instantiates the Model object, which is then serialized to JSON and sent to the frontend."*
+
+### Q4: Why did you avoid using an ORM like Hibernate or JPA?
+**Answer:**  
+*"In an Advanced Database Systems course, our focus is demonstrating direct mastery over MySQL objects: our 6 Views, 6 Functions, 6 Procedures, and 6 Triggers. ORMs abstract SQL away, often bypass stored procedures, and suffer from cache-invalidation bugs when database triggers update rows behind the scenes. Using Spring `JdbcTemplate` gives us 100% transparent control over native SQL execution."*
+
+### Q5: How does Concurrency Control prevent two users from buying the last item?
+**Answer:**  
+*"Concurrency is controlled at the database engine level via MySQL InnoDB row-level locking. When an order is placed, an atomic `UPDATE products SET current_stock = current_stock - quantity` is executed. If a concurrent transaction tries to decrement the stock below 0, our trigger `trg_before_product_stock_check` throws `SIGNAL SQLSTATE '45000'`. This aborts the transaction, triggers an automatic `ROLLBACK`, and safely prevents overselling."*
+
+### Q6: What is the difference between a Stored Function and a Stored Procedure?
+**Answer:**  
+*"A **Stored Function** must return a single scalar value using the `RETURNS` clause and can be called directly inside SQL statements (e.g. `SELECT fn_calculate_delivery_fee(subtotal)`). A **Stored Procedure** does not have a return clause (uses `IN`, `OUT`, `INOUT` parameters), must be executed using `CALL`, and can execute full transactional logic (`START TRANSACTION`, `COMMIT`, `ROLLBACK`) which functions are forbidden to do."*
+
+### Q7: Why use Database Triggers instead of writing the logic in Java backend code?
+**Answer:**  
+*"Triggers guarantee non-bypassable data integrity at the database level. If a developer, admin, or external script updates the `products` table directly through MySQL Workbench or CLI, the trigger still executes automatically. Java code only protects requests that go through the website; database triggers protect the data universally."*
+
+### Q8: What are the ACID properties, and where are they demonstrated in your system?
+**Answer:**  
+*"They are demonstrated in `sp_place_order_transaction`:  
+• **Atomicity:** Creating orders, payments, order items, stock reduction, and audit logging all succeed together; if any error occurs, `ROLLBACK` undoes everything.  
+• **Consistency:** Database integrity constraints and triggers ensure stock never goes negative.  
+• **Isolation:** InnoDB `REPEATABLE READ` isolation prevents concurrent checkouts from dirty-reading uncommitted rows.  
+• **Durability:** Committed transactions are permanently written to InnoDB write-ahead redo logs on disk."*
+
+### Q9: Why use Views instead of writing joins in your Java DAO classes?
+**Answer:**  
+*"Views provide security, abstraction, and query simplicity. For example, `v_active_product_catalog` pre-joins categories and brands and filters only active products. Instead of writing a complex 4-table join in every Java query, the DAO simply runs `SELECT * FROM v_active_product_catalog`. Furthermore, views allow administrators to grant access to specific columns without exposing underlying base tables."*
+
+### Q10: How does your system implement the Principle of Least Privilege (PoLP)?
+**Answer:**  
+*"We configured three distinct database user accounts:  
+1. `supermart_admin`: Has full administrative privileges (`ALL PRIVILEGES`) for DDL and schema management.  
+2. `supermart_manager`: Restricted to catalog maintenance, price updates, order statuses, and executing `sp_restock_product`. Denied table deletion rights (`DELETE` on orders or `DROP`).  
+3. `supermart_customer`: Strictly restricted to browsing active views, managing personal addresses, and calling `sp_place_order_transaction`. Cannot modify product stock directly."*
+
+### Q11: What is a Compensating Transaction?
+**Answer:**  
+*"A Compensating Transaction reverses the effects of a previously committed transaction. In our system, `sp_cancel_order_transaction` acts as a compensating transaction: it restores deducted inventory back to the `products` table, sets payment status to `REFUNDED`, updates the order status to `CANCELLED`, and logs the cancellation in `audit_logs`."*
+
+### Q12: How does the Audit Trail system guarantee Non-Repudiation?
+**Answer:**  
+*"The `audit_logs` table records every critical action (`INSERT`, `UPDATE`, `CHECKOUT`, `OTHER`) along with the user ID, affected table, primary record ID, exact change description, and timestamp. Because price updates and user registrations are logged automatically via database triggers, users and staff cannot deny actions they performed."*
+
+### Q13: What is the purpose of Scheduled Events in your system?
+**Answer:**  
+*"Scheduled Events are automated cron jobs running inside the MySQL daemon. They eliminate the need for manual maintenance: `evt_daily_cleanup_expired_coupons` deactivates old coupons daily, `evt_hourly_stock_alert_check` auto-resolves alerts once restocked, `evt_daily_audit_snapshot` logs daily financial summaries, and `evt_monthly_purge_old_audit_logs` purges logs older than 180 days to keep the database fast."*
+
+### Q14: How are timestamps and timezones handled between MySQL and React?
+**Answer:**  
+*"MySQL stores all transaction and audit timestamps in standard UTC format. When the Spring Boot backend delivers timestamps via JSON, the React frontend uses a formatting utility (`formatAuditDateTime`) that presents the timestamp directly in Sri Lankan Local Time (`Asia/Colombo`, UTC+05:30) with clear 12-hour AM/PM formatting."*
+
+### Q15: Why is index optimization important in your database schema?
+**Answer:**  
+*"We applied B-Tree indexes on frequently filtered and joined columns, such as `idx_products_category` on `products(category_id)`, `idx_orders_user` on `orders(user_id)`, and `idx_audit_created` on `audit_logs(created_at)`. This converts full table scans into fast logarithmic index lookups ($O(\log N)$), ensuring sub-second response times even when tables grow to millions of rows."*
+
+
+

@@ -197,13 +197,14 @@ CREATE INDEX idx_audit_action ON audit_logs(action_type);
 -- SECTION 3: SIX (6) ADVANCED VIEWS
 -- =====================================================================================
 
--- View 1: Active Product Catalog
+-- View 1: Active Product Catalog with Brand & Category details
 CREATE OR REPLACE VIEW v_active_product_catalog AS
 SELECT 
     p.product_id,
     p.product_name,
     p.description,
     p.unit_type,
+    p.base_price,
     p.unit_price,
     p.current_stock,
     CASE 
@@ -219,7 +220,7 @@ SELECT
 FROM products p
 JOIN categories c ON p.category_id = c.category_id
 JOIN brands b ON p.brand_id = b.brand_id
-WHERE p.is_active = TRUE AND c.is_active = TRUE;
+WHERE p.is_active = TRUE AND c.is_active = TRUE AND b.is_active = TRUE;
 
 -- View 2: Low Stock Alerts
 CREATE OR REPLACE VIEW v_low_stock_alerts AS
@@ -278,7 +279,8 @@ SELECT
     c.category_name,
     b.brand_name,
     SUM(oi.quantity) AS total_quantity_sold,
-    SUM(oi.item_total) AS total_sales_revenue
+    SUM(oi.item_total) AS total_sales_revenue,
+    SUM(oi.item_total - (oi.quantity * COALESCE(oi.base_price, 0))) AS total_profit
 FROM order_items oi
 JOIN products p ON oi.product_id = p.product_id
 JOIN categories c ON p.category_id = c.category_id

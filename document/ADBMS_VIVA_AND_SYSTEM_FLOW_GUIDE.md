@@ -149,3 +149,102 @@ Here is the exact lifecycle you can describe to your lecturer:
 14. Admin reviews revenue trends via View: v_daily_sales_summary & View: v_top_selling_products
 15. Admin generates month-end report via Stored Procedure: sp_generate_monthly_report
 ```
+
+---
+
+## 10. Master Summary: 30 Database Objects & Application Usage Status
+
+Every database category in this project contains exactly **six (6)** objects, totaling **30 database objects**. Below is the quick reference indicating whether each object is actively called by the Spring Boot backend / React frontend, called internally by procedures, or maintained as a standalone database utility.
+
+### A. The Six (6) Views (`database/02_views.sql`)
+| View Name | Used in App? | Backend DAO / Query | Frontend Component / Page |
+| :--- | :---: | :--- | :--- |
+| **`v_active_product_catalog`** | **YES** | `ProductDao.java` (`getActiveProductCatalog`) | Customer Home catalog grid & category filters |
+| **`v_low_stock_alerts`** | **YES** | `ProductDao.java` (`getLowStockAlerts`) | Manager Dashboard ("Low Stock Alerts" table) |
+| **`v_customer_order_history`** | **YES** | `OrderDao.java` (`getOrdersByUserId`, `getAllOrders`) | Customer Order History & Manager Order Tracking |
+| **`v_daily_sales_summary`** | **YES** | `AnalyticsDao.java` (`getDailySalesTrends`) | Admin Dashboard Daily Sales trend chart |
+| **`v_top_selling_products`** | **YES** | `AnalyticsDao.java` (`getTopSellingProducts`) | Admin Dashboard Top Selling Products Leaderboard |
+| **`v_active_coupons`** | **YES** | `CouponDao.java` (`getActiveCoupons`) | Customer Checkout Modal ("Available Coupons" list) |
+
+### B. The Six (6) Stored Functions (`database/03_functions.sql`)
+| Function Name | Used in App? | Calling Mechanism | Explanation & Usage Context |
+| :--- | :---: | :--- | :--- |
+| **`fn_calculate_coupon_discount`** | **YES** | Called inside `sp_place_order_transaction` | Computes percentage discount if subtotal meets minimum order requirement. |
+| **`fn_calculate_delivery_fee`** | **YES** | Called inside `sp_place_order_transaction` | Returns Rs. 0.00 for orders ≥ Rs. 3,000 or eligible coupon; Rs. 350.00 otherwise. |
+| **`fn_customer_lifetime_spending`** | **YES** | Queried via `AnalyticsDao.java` | Displays customer's total historical spend badge in `ProfileModal.jsx`. |
+| **`fn_validate_nic_format`** | **YES** | Called inside `sp_create_operational_manager` | Validates Sri Lankan 9-digit+V/X or 12-digit NIC formats before inserting managers. |
+| **`fn_is_product_in_stock`** | **STANDALONE** | Database Utility | Reusable scalar stock validator. In the web app, stock availability is checked directly against `v_active_product_catalog`. |
+| **`fn_get_order_total_items`** | **STANDALONE** | Database Utility | Sums order item quantities. In the web app, line item counts are calculated directly from line items in memory. |
+
+### C. The Six (6) Stored Procedures (`database/04_procedures.sql`)
+| Procedure Name | Used in App? | Backend DAO Method | Frontend Trigger |
+| :--- | :---: | :--- | :--- |
+| **`sp_register_customer`** | **YES** | `UserDao.java` (`registerCustomer`) | Customer Registration form submit |
+| **`sp_create_operational_manager`** | **YES** | `UserDao.java` (`createOperationalManager`) | Admin "Add Operational Manager" form submit |
+| **`sp_restock_product`** | **YES** | `ProductDao.java` (`restockProduct`) | Manager Dashboard "Restock" button click |
+| **`sp_add_customer_address`** | **YES** | `AddressDao.java` (`addAddress`) | Checkout Step 1 "Save Address" button click |
+| **`sp_place_order_transaction`** | **YES** | `OrderDao.java` (`placeOrderTransaction`) | Checkout Step 3 "Place Order" button click |
+| **`sp_generate_monthly_report`** | **YES** | `AnalyticsDao.java` (`generateMonthlyReport`) | Admin Dashboard "Generate Report" button click |
+
+### D. The Six (6) Database Triggers (`database/05_triggers.sql`)
+| Trigger Name | Event & Table | Automatic Action Performed |
+| :--- | :--- | :--- |
+| **`trg_after_order_item_insert_deduct_stock`** | `AFTER INSERT ON order_items` | Deducts product `current_stock` when line items are added to an order. |
+| **`trg_after_product_stock_update_alert`** | `AFTER UPDATE ON products` | Generates a new warning row in `stock_alerts` when stock hits `min_stock_level`. |
+| **`trg_before_product_price_audit`** | `BEFORE UPDATE ON products` | Logs previous and updated unit prices to `audit_logs` before price changes commit. |
+| **`trg_after_user_insert_audit`** | `AFTER INSERT ON users` | Automatically records an `INSERT` audit event when a customer or manager registers. |
+| **`trg_before_product_stock_check`** | `BEFORE UPDATE ON products` | Enforces data integrity: Throws `SQLSTATE '45000'` error if stock drops below 0. |
+| **`trg_after_order_status_update_audit`** | `AFTER UPDATE ON orders` | Logs order status transitions (`PENDING` → `CONFIRMED` → `DELIVERED`) to `audit_logs`. |
+
+### E. The Six (6) Scheduled Events (`database/06_events.sql`)
+| Event Name | Frequency | Automatic Server Task |
+| :--- | :--- | :--- |
+| **`evt_daily_cleanup_expired_coupons`** | `EVERY 1 DAY` | Deactivates expired promotional coupons (`is_active = FALSE`). |
+| **`evt_hourly_stock_alert_check`** | `EVERY 1 HOUR` | Auto-resolves records in `stock_alerts` once products have been restocked. |
+| **`evt_daily_audit_snapshot`** | `EVERY 1 DAY` | Takes a daily midnight snapshot of orders and total revenue, logging into `audit_logs`. |
+| **`evt_monthly_purge_old_audit_logs`** | `EVERY 1 MONTH` | Purges audit records older than 180 days to maintain fast query execution. |
+| **`evt_weekly_zero_stock_flag`** | `EVERY 1 WEEK` | Logs warning entries for catalog products that have remained at 0 stock for > 14 days. |
+| **`evt_cancel_stale_pending_orders`** | `EVERY 1 DAY` | Automatically cancels unpaid pending orders that have remained inactive > 48 hours. |
+
+---
+
+## 11. ACID Transactions Architecture & Implementation Reference
+
+Transactions guarantee that business operations involving multiple database tables maintain absolute consistency and reliability according to **ACID** principles.
+
+### Key Transactions in SuperMart:
+1. **Order Checkout Transaction (`sp_place_order_transaction`)**:
+   - **Atomicity**: The checkout operation involves inserting the order header into `orders`, inserting the payment transaction into `payments`, inserting line items into `order_items`, decrementing stock via trigger, and recording an entry into `audit_logs`. If any of these steps fails (e.g. invalid payment or DB failure), the entire operation rolls back completely using `DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN ROLLBACK; ... END;`.
+   - **Consistency**: Stock cannot drop below zero due to `trg_before_product_stock_check`. Foreign key constraints between `orders`, `users`, and `payments` are strictly preserved.
+   - **Isolation**: Standard MySQL InnoDB `REPEATABLE READ` isolation level prevents dirty reads while concurrent customers place orders.
+   - **Durability**: Once `COMMIT` executes, all state changes are permanently written to InnoDB redo logs on disk.
+
+2. **Compensating Cancellation Transaction (`sp_cancel_order_transaction`)**:
+   - Safely rolls back the effects of a confirmed order by reversing inventory deduction (`UPDATE products SET current_stock = current_stock + qty`), updating payment status to `REFUNDED`, updating order status to `CANCELLED`, and inserting a cancellation audit record.
+
+3. **Controlled Rollback Test (Integrity Constraint)**:
+   - Attempting to force negative stock via `UPDATE products SET current_stock = -10` triggers `SIGNAL SQLSTATE '45000'`, forcing an immediate error and demonstrating automatic transaction abort.
+
+---
+
+## 12. Master System Audit Trail & Security Ledger Reference
+
+The SuperMart audit system records all critical administrative, managerial, and system events in the `audit_logs` table for compliance, security, and dispute resolution.
+
+### A. The 4 Audit Action Filters
+1. **`INSERT`**: Records account creation for new customers, operational managers, and administrative users.
+2. **`UPDATE`**: Records modifications to product retail prices, inventory restocks, and order delivery status progressions.
+3. **`CHECKOUT`**: Records customer order placements along with the total billing amount.
+4. **`OTHER`**: Captures autonomous system background events:
+   - **`SNAPSHOT`**: Daily sales summaries generated automatically at midnight by scheduled event `evt_daily_audit_snapshot`.
+   - **`WARNING`**: Alerts generated for long-standing depleted products (0 stock for > 14 days) by `evt_weekly_zero_stock_flag`.
+
+### B. Audit Trail Columns & Attribution ("Who Did It")
+- **Actor Attribution**: Every audit entry clearly attributes responsibility:
+  - If performed by the Super Admin (e.g., adding an Operational Manager), it shows `Super Admin` with their name.
+  - If performed by an Operational Manager (e.g., restocking or price updates), it shows the manager's name and ID.
+  - If performed by a customer during checkout, it attributes the customer.
+  - If generated by background scheduled events (`SNAPSHOT`, `WARNING`), it attributes `Automated System Event`.
+- **Timestamping & Timezone**: Timestamps are stored in UTC format in the database and formatted directly to the user's local Sri Lankan time (`Asia/Colombo`, UTC+05:30) in the dashboard.
+- **Data Lifecycle**: Audit logs are retained for 180 days for statutory regulatory compliance and automatically purged thereafter via `evt_monthly_purge_old_audit_logs`.
+

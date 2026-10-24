@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, BarChart3, Shield, FileText, Plus, RefreshCw, 
   DollarSign, ShoppingCart, UserCheck, AlertOctagon, TrendingUp, Calendar, CheckCircle2,
-  X, Table, Printer, Tag, Award, Filter, Search, Package
+  X, Table, Printer, Tag, Award, Filter, Search, Package,
+  ChevronLeft, ChevronRight, Clock
 } from 'lucide-react';
 import { api } from '../api';
 
@@ -52,6 +53,16 @@ export default function AdminDashboard({ user }) {
   // Audit Trail Filter & Search States
   const [auditActionFilter, setAuditActionFilter] = useState('ALL');
   const [auditSearchQuery, setAuditSearchQuery] = useState('');
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditLimitMode, setAuditLimitMode] = useState('25'); // '25' (recent 25), '50', 'ALL'
+
+  // Metric & Count Formatter for scalable enterprise logging (e.g. 100k+, 1.5M)
+  const formatCompactCount = (num) => {
+    if (num == null) return '0';
+    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M+';
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k+';
+    return String(num);
+  };
 
   const [loading, setLoading] = useState(false);
 
@@ -177,7 +188,7 @@ export default function AdminDashboard({ user }) {
         api.getDailySales(),
         api.getTopSelling(),
         api.getManagers(),
-        api.getAuditLogs(60),
+        api.getAuditLogs(150),
         api.getAnalyticsReport({ periodType: 'monthly', year: 2026, month: 10 }),
       ]);
 
@@ -217,7 +228,8 @@ export default function AdminDashboard({ user }) {
         password: mgrPassword,
       };
 
-      const res = await api.createManager(user.userId, payload);
+      const adminId = user?.userId || 1;
+      const res = await api.createManager(adminId, payload);
       setMgrSuccess(res.message || 'Operational Manager created successfully!');
       
       setTimeout(() => {
@@ -416,7 +428,12 @@ export default function AdminDashboard({ user }) {
           }`}
         >
           <Shield className="w-4 h-4 text-blue-400" />
-          <span>System Audit Trail ({auditLogs.length})</span>
+          <span>System Audit Trail</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
+            activeTab === 'audit' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+          }`}>
+            {formatCompactCount(auditLogs.length)}
+          </span>
         </button>
       </div>
 
@@ -1606,16 +1623,46 @@ export default function AdminDashboard({ user }) {
         const otherCount = auditLogs.filter(l => !['INSERT', 'UPDATE', 'CHECKOUT'].includes(l.actionType)).length;
 
         const filteredLogs = auditLogs.filter(log => {
-          const matchesAction = auditActionFilter === 'ALL' || log.actionType === auditActionFilter;
+          const matchesAction = auditActionFilter === 'ALL'
+            ? true
+            : auditActionFilter === 'OTHER'
+              ? !['INSERT', 'UPDATE', 'CHECKOUT'].includes(log.actionType)
+              : log.actionType === auditActionFilter;
+
           const q = auditSearchQuery.trim().toLowerCase();
           const matchesQuery = !q || 
             String(log.logId).toLowerCase().includes(q) ||
             String(log.tableName || '').toLowerCase().includes(q) ||
             String(log.actionType || '').toLowerCase().includes(q) ||
             String(log.recordId || '').toLowerCase().includes(q) ||
-            String(log.details || '').toLowerCase().includes(q);
+            String(log.details || '').toLowerCase().includes(q) ||
+            String(log.performedBy || '').toLowerCase().includes(q) ||
+            String(log.userRole || '').toLowerCase().includes(q);
           return matchesAction && matchesQuery;
         });
+
+        // Pagination & Recent 25 Limit Handling
+        const pageSize = auditLimitMode === 'ALL' ? (filteredLogs.length || 1) : parseInt(auditLimitMode, 10);
+        const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize));
+        const safePage = Math.min(Math.max(1, auditPage), totalPages);
+        const displayedLogs = filteredLogs.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+        // Accurate local date and time formatting (avoids timezone skew)
+        const formatAuditDateTime = (raw) => {
+          if (!raw) return { dateStr: '-', timeStr: '' };
+          const clean = String(raw).replace('T', ' ').replace('Z', '').split('.')[0];
+          const parts = clean.split(' ');
+          const dateStr = parts[0];
+          if (parts[1]) {
+            const [h, m, s] = parts[1].split(':');
+            let hour = parseInt(h, 10);
+            const ampm = hour >= 12 ? 'PM' : 'AM';
+            hour = hour % 12 || 12;
+            const timeStr = `${String(hour).padStart(2, '0')}:${m}:${s} ${ampm}`;
+            return { dateStr, timeStr };
+          }
+          return { dateStr, timeStr: '' };
+        };
 
         return (
           <div className="space-y-6 animate-in fade-in duration-150">
@@ -1631,7 +1678,7 @@ export default function AdminDashboard({ user }) {
                       Security Ledger
                     </span>
                     <span className="text-xs font-mono font-bold text-slate-400">
-                      {auditLogs.length} Verified Entries
+                      {formatCompactCount(auditLogs.length)} Active Records
                     </span>
                   </div>
                   <h3 className="text-xl font-black text-slate-900 mt-1">
@@ -1663,8 +1710,8 @@ export default function AdminDashboard({ user }) {
                   </div>
                 </div>
                 <div className="mt-2.5">
-                  <span className="text-2xl font-black text-slate-900 block font-mono">{auditLogs.length}</span>
-                  <span className="text-[10px] text-slate-400">Total system events logged</span>
+                  <span className="text-2xl font-black text-slate-900 block font-mono">{formatCompactCount(auditLogs.length)}</span>
+                  <span className="text-[10px] text-slate-400">Active rolling ledger • 180-day retention</span>
                 </div>
               </div>
 
@@ -1676,7 +1723,7 @@ export default function AdminDashboard({ user }) {
                   </div>
                 </div>
                 <div className="mt-2.5">
-                  <span className="text-2xl font-black text-emerald-900 block font-mono">{insertCount}</span>
+                  <span className="text-2xl font-black text-emerald-900 block font-mono">{formatCompactCount(insertCount)}</span>
                   <span className="text-[10px] text-emerald-600 font-semibold">New accounts & records</span>
                 </div>
               </div>
@@ -1689,7 +1736,7 @@ export default function AdminDashboard({ user }) {
                   </div>
                 </div>
                 <div className="mt-2.5">
-                  <span className="text-2xl font-black text-amber-900 block font-mono">{updateCount}</span>
+                  <span className="text-2xl font-black text-amber-900 block font-mono">{formatCompactCount(updateCount)}</span>
                   <span className="text-[10px] text-amber-600 font-semibold">Price & record updates</span>
                 </div>
               </div>
@@ -1702,14 +1749,14 @@ export default function AdminDashboard({ user }) {
                   </div>
                 </div>
                 <div className="mt-2.5">
-                  <span className="text-2xl font-black text-purple-900 block font-mono">{checkoutCount}</span>
+                  <span className="text-2xl font-black text-purple-900 block font-mono">{formatCompactCount(checkoutCount)}</span>
                   <span className="text-[10px] text-purple-600 font-semibold">Customer checkout actions</span>
                 </div>
               </div>
             </div>
 
             {/* Filter & Search Toolbar */}
-            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
               {/* Action Filter Pills */}
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mr-1 flex items-center">
@@ -1721,11 +1768,14 @@ export default function AdminDashboard({ user }) {
                   { id: 'INSERT', label: 'INSERT', count: insertCount },
                   { id: 'UPDATE', label: 'UPDATE', count: updateCount },
                   { id: 'CHECKOUT', label: 'CHECKOUT', count: checkoutCount },
-                  ...(otherCount > 0 ? [{ id: 'OTHER', label: 'OTHER', count: otherCount }] : [])
+                  ...(otherCount > 0 ? [{ id: 'OTHER', label: 'OTHER (SYSTEM)', count: otherCount }] : [])
                 ].map(item => (
                   <button
                     key={item.id}
-                    onClick={() => setAuditActionFilter(item.id)}
+                    onClick={() => {
+                      setAuditActionFilter(item.id);
+                      setAuditPage(1);
+                    }}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 ${
                       auditActionFilter === item.id
                         ? 'bg-slate-900 text-white shadow-xs'
@@ -1742,20 +1792,54 @@ export default function AdminDashboard({ user }) {
                 ))}
               </div>
 
-              {/* Search Box */}
-              <div className="flex items-center space-x-2">
-                <div className="relative flex-1 md:w-64">
+              {/* Search Box & Display Limit Selector */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Display Range Selector */}
+                <div className="flex items-center space-x-1 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-1.5">
+                    Show:
+                  </span>
+                  {[
+                    { id: '25', label: 'Recent 25' },
+                    { id: '50', label: '50' },
+                    { id: 'ALL', label: 'All' }
+                  ].map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => {
+                        setAuditLimitMode(opt.id);
+                        setAuditPage(1);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        auditLimitMode === opt.id
+                          ? 'bg-slate-900 text-white shadow-2xs'
+                          : 'hover:bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Search Box */}
+                <div className="relative flex-1 sm:w-60">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={auditSearchQuery}
-                    onChange={(e) => setAuditSearchQuery(e.target.value)}
-                    placeholder="Search logs, tables, IDs..."
+                    onChange={(e) => {
+                      setAuditSearchQuery(e.target.value);
+                      setAuditPage(1);
+                    }}
+                    placeholder="Search details, actor, tables..."
                     className="w-full pl-8 pr-7 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
                   />
                   {auditSearchQuery && (
                     <button
-                      onClick={() => setAuditSearchQuery('')}
+                      onClick={() => {
+                        setAuditSearchQuery('');
+                        setAuditPage(1);
+                      }}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                     >
                       <X className="w-3 h-3" />
@@ -1768,6 +1852,7 @@ export default function AdminDashboard({ user }) {
                     onClick={() => {
                       setAuditActionFilter('ALL');
                       setAuditSearchQuery('');
+                      setAuditPage(1);
                     }}
                     className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100 text-xs font-semibold transition cursor-pointer whitespace-nowrap"
                   >
@@ -1784,15 +1869,15 @@ export default function AdminDashboard({ user }) {
                   <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
                     <tr>
                       <th className="py-3 px-4 w-24">Log ID</th>
-                      <th className="py-3 px-4 w-44">Timestamp</th>
-                      <th className="py-3 px-4 w-28 text-center">Action Type</th>
-                      <th className="py-3 px-4 w-32">Target Table</th>
+                      <th className="py-3 px-4 w-44">Date & Time</th>
+                      <th className="py-3 px-4 w-32 text-center">Action Type</th>
+                      <th className="py-3 px-4 w-28">Target Table</th>
                       <th className="py-3 px-4 w-24">Record ID</th>
-                      <th className="py-3 px-4">Audit Event Details</th>
+                      <th className="py-3 px-4">Audit Event Details & Performed By</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {filteredLogs.length === 0 ? (
+                    {displayedLogs.length === 0 ? (
                       <tr>
                         <td colSpan="6" className="py-12 text-center text-slate-400">
                           <Shield className="w-8 h-8 text-slate-300 mx-auto mb-2" />
@@ -1805,10 +1890,8 @@ export default function AdminDashboard({ user }) {
                         </td>
                       </tr>
                     ) : (
-                      filteredLogs.map((log) => {
-                        const dateObj = new Date(log.createdAt);
-                        const dateStr = !isNaN(dateObj) ? dateObj.toLocaleDateString() : log.createdAt;
-                        const timeStr = !isNaN(dateObj) ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+                      displayedLogs.map((log) => {
+                        const { dateStr, timeStr } = formatAuditDateTime(log.createdAt);
 
                         return (
                           <tr key={log.logId} className="hover:bg-slate-50/80 transition-colors">
@@ -1824,7 +1907,10 @@ export default function AdminDashboard({ user }) {
                               <div className="flex flex-col">
                                 <span className="font-semibold text-slate-900 font-mono text-xs">{dateStr}</span>
                                 {timeStr && (
-                                  <span className="text-[10px] text-slate-400 font-mono mt-0.5">{timeStr}</span>
+                                  <span className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center">
+                                    <Clock className="w-3 h-3 mr-1 text-slate-400 shrink-0" />
+                                    {timeStr}
+                                  </span>
                                 )}
                               </div>
                             </td>
@@ -1847,8 +1933,8 @@ export default function AdminDashboard({ user }) {
                                   <span>CHECKOUT</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                                   <span>{log.actionType}</span>
                                 </span>
                               )}
@@ -1872,11 +1958,40 @@ export default function AdminDashboard({ user }) {
                               )}
                             </td>
 
-                            {/* Details */}
+                            {/* Details & Performed By */}
                             <td className="py-3 px-4">
-                              <p className="text-slate-800 font-sans text-xs leading-relaxed">
-                                {log.details}
-                              </p>
+                              <div className="space-y-1.5">
+                                <p className="text-slate-900 font-sans text-xs leading-relaxed font-medium">
+                                  {log.details}
+                                </p>
+                                
+                                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                                  <span className="font-semibold text-slate-400">Performed By:</span>
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                                    <UserCheck className="w-3 h-3 mr-1 text-slate-500 shrink-0" />
+                                    {log.performedBy || (log.userId ? `User #${log.userId}` : 'System Engine')}
+                                  </span>
+                                  {log.userRole && (
+                                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                      log.userRole === 'ROLE_ADMIN' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                                      log.userRole === 'ROLE_MANAGER' ? 'bg-amber-50 text-amber-800 border border-amber-200' :
+                                      log.userRole === 'ROLE_CUSTOMER' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
+                                      'bg-blue-50 text-blue-700 border border-blue-200'
+                                    }`}>
+                                      {log.userRole.replace('ROLE_', '')}
+                                    </span>
+                                  )}
+                                  {log.userId ? (
+                                    <span className="text-[10px] font-mono text-slate-400">
+                                      (User ID: #{log.userId})
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-semibold text-slate-400">
+                                      (Automated MySQL Event)
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1886,16 +2001,47 @@ export default function AdminDashboard({ user }) {
                 </table>
               </div>
 
-              {/* Table Footer */}
-              <div className="bg-slate-50/80 px-5 py-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
-                <span>
-                  Showing <strong className="text-slate-900 font-mono">{filteredLogs.length}</strong> of{' '}
-                  <strong className="text-slate-900 font-mono">{auditLogs.length}</strong> audit records
-                </span>
-                <span className="text-[11px] font-medium text-slate-400 flex items-center space-x-1">
-                  <Shield className="w-3.5 h-3.5 text-emerald-600 inline mr-1" />
-                  <span>Verified System Audit Ledger • Immutable Records</span>
-                </span>
+              {/* Table Footer with Pagination Controls */}
+              <div className="bg-slate-50/80 px-5 py-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+                <div className="flex items-center space-x-2">
+                  <span>
+                    Showing <strong className="text-slate-900 font-mono">{displayedLogs.length}</strong> of{' '}
+                    <strong className="text-slate-900 font-mono">{filteredLogs.length}</strong> records
+                    {auditLimitMode === '25' && ' (Recent 25 items)'}
+                  </span>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-[11px] font-medium text-slate-400 flex items-center">
+                    <Shield className="w-3.5 h-3.5 text-emerald-600 inline mr-1" />
+                    Immutable Audit Ledger
+                  </span>
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && auditLimitMode !== 'ALL' && (
+                  <div className="flex items-center space-x-1.5">
+                    <button
+                      onClick={() => setAuditPage(prev => Math.max(1, prev - 1))}
+                      disabled={safePage <= 1}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center text-xs font-semibold cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5 mr-1" />
+                      Prev
+                    </button>
+
+                    <span className="px-2 py-0.5 text-xs font-bold text-slate-700 font-mono">
+                      Page {safePage} of {totalPages}
+                    </span>
+
+                    <button
+                      onClick={() => setAuditPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={safePage >= totalPages}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center text-xs font-semibold cursor-pointer"
+                    >
+                      Next
+                      <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1915,7 +2061,7 @@ export default function AdminDashboard({ user }) {
                 Create Operational Manager
               </h3>
               <p className="text-xs text-slate-500 mt-1">
-                The mobile number automatically becomes their login username. Calls procedure <code>sp_create_operational_manager</code>.
+                The mobile number automatically becomes their login username.
               </p>
             </div>
 

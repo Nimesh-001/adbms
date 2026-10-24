@@ -84,9 +84,26 @@ export default function App() {
         api.getCategories(),
         api.getBrands(),
       ]);
-      setProducts(prodRes.data || []);
+      const loadedProducts = prodRes.data || [];
+      setProducts(loadedProducts);
       setCategories(catRes.data || []);
       setBrands(brandRes.data || []);
+
+      // Synchronize current stock for all items currently in cart
+      setCartItems(prevCart =>
+        prevCart.map(item => {
+          const match = loadedProducts.find(p => p.productId === item.productId);
+          if (match) {
+            const maxStock = Number(match.currentStock) || 0;
+            return {
+              ...item,
+              currentStock: maxStock,
+              quantity: maxStock > 0 ? Math.min(item.quantity, maxStock) : item.quantity,
+            };
+          }
+          return item;
+        })
+      );
     } catch (err) {
       console.error('Failed to load catalog:', err);
     }
@@ -105,17 +122,22 @@ export default function App() {
     }
   }, [user, currentView]);
 
-  // Cart Actions
+  // Cart Actions - strictly bounded by available stock
   const handleAddToCart = (product, quantity) => {
+    const maxStock = Number(product.currentStock) || 0;
+    if (maxStock <= 0) return;
+
     setCartItems(prev => {
       const existing = prev.find(item => item.productId === product.productId);
       if (existing) {
+        const allowedQty = Math.min(existing.quantity + quantity, maxStock);
         return prev.map(item =>
           item.productId === product.productId
-            ? { ...item, quantity: item.quantity + quantity }
+            ? { ...item, quantity: allowedQty, currentStock: maxStock }
             : item
         );
       }
+      const initialQty = Math.min(Math.max(1, quantity), maxStock);
       return [
         ...prev,
         {
@@ -124,7 +146,8 @@ export default function App() {
           unitType: product.unitType,
           unitPrice: product.unitPrice,
           imageUrl: product.imageUrl,
-          quantity,
+          currentStock: maxStock,
+          quantity: initialQty,
         },
       ];
     });
@@ -135,8 +158,16 @@ export default function App() {
       handleRemoveItem(productId);
       return;
     }
+    const prod = products.find(p => p.productId === productId);
     setCartItems(prev =>
-      prev.map(item => (item.productId === productId ? { ...item, quantity: newQty } : item))
+      prev.map(item => {
+        if (item.productId === productId) {
+          const maxStock = prod ? Number(prod.currentStock) : (Number(item.currentStock) || 999999);
+          const validQty = Math.min(newQty, maxStock);
+          return { ...item, quantity: validQty, currentStock: maxStock };
+        }
+        return item;
+      })
     );
   };
 

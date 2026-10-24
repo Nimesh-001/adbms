@@ -616,7 +616,7 @@ export default function ManagerDashboard({ user, onOpenProfile, onRefreshCatalog
           <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center space-x-2">
             <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
             <span>
-              These items are currently running below their minimum stock threshold. Use the Restock button to call MySQL procedure <code>sp_restock_product</code>.
+              These items are currently running below their minimum stock threshold. Use the Restock button to replenish inventory.
             </span>
           </div>
 

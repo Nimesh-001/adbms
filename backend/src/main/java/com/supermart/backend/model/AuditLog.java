@@ -10,6 +10,8 @@ public class AuditLog {
     private Integer recordId;
     private String details;
     private Timestamp createdAt;
+    private String performedBy;
+    private String userRole;
 
     public AuditLog() {}
 
@@ -33,4 +35,10 @@ public class AuditLog {
 
     public Timestamp getCreatedAt() { return createdAt; }
     public void setCreatedAt(Timestamp createdAt) { this.createdAt = createdAt; }
+
+    public String getPerformedBy() { return performedBy; }
+    public void setPerformedBy(String performedBy) { this.performedBy = performedBy; }
+
+    public String getUserRole() { return userRole; }
+    public void setUserRole(String userRole) { this.userRole = userRole; }
 }

@@ -96,6 +96,8 @@ public class ProductDao {
      */
     public Map<String, Object> restockProduct(int userId, int productId, int additionalStock) {
         SimpleJdbcCall call = new SimpleJdbcCall(jdbcTemplate)
+                .withCatalogName("supermart_db")
+                .withoutProcedureColumnMetaDataAccess()
                 .withProcedureName("sp_restock_product")
                 .declareParameters(
                         new SqlParameter("p_user_id", Types.INTEGER),

@@ -95,7 +95,23 @@ public class AnalyticsDao {
      * Read from Table: audit_logs (Using index idx_audit_created)
      */
     public List<AuditLog> getRecentAuditLogs(int limit) {
-        String sql = "SELECT * FROM audit_logs ORDER BY log_id DESC LIMIT ?";
+        String sql = """
+            SELECT 
+                a.log_id,
+                a.user_id,
+                a.action_type,
+                a.table_name,
+                a.record_id,
+                a.details,
+                a.created_at,
+                COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))), ''), u.username, 'System Engine') AS performed_by,
+                COALESCE(r.role_name, 'SYSTEM') AS user_role
+            FROM audit_logs a
+            LEFT JOIN users u ON a.user_id = u.user_id
+            LEFT JOIN roles r ON u.role_id = r.role_id
+            ORDER BY a.log_id DESC
+            LIMIT ?
+        """;
         return jdbcTemplate.query(sql, (rs, rowNum) -> {
             AuditLog log = new AuditLog();
             log.setLogId(rs.getInt("log_id"));
@@ -105,6 +121,8 @@ public class AnalyticsDao {
             log.setRecordId(rs.getObject("record_id", Integer.class));
             log.setDetails(rs.getString("details"));
             log.setCreatedAt(rs.getTimestamp("created_at"));
+            log.setPerformedBy(rs.getString("performed_by"));
+            log.setUserRole(rs.getString("user_role"));
             return log;
         }, limit);
     }

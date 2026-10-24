@@ -81,6 +81,8 @@ public class UserDao {
      */
     public Map<String, Object> registerCustomer(RegisterRequest req) {
         SimpleJdbcCall call = new SimpleJdbcCall(jdbcTemplate)
+                .withCatalogName("supermart_db")
+                .withoutProcedureColumnMetaDataAccess()
                 .withProcedureName("sp_register_customer")
                 .declareParameters(
                         new SqlParameter("p_first_name", Types.VARCHAR),
@@ -107,6 +109,8 @@ public class UserDao {
      */
     public Map<String, Object> createOperationalManager(int adminId, CreateManagerRequest req) {
         SimpleJdbcCall call = new SimpleJdbcCall(jdbcTemplate)
+                .withCatalogName("supermart_db")
+                .withoutProcedureColumnMetaDataAccess()
                 .withProcedureName("sp_create_operational_manager")
                 .declareParameters(
                         new SqlParameter("p_admin_id", Types.INTEGER),
@@ -131,7 +135,16 @@ public class UserDao {
         inParams.put("p_gender", req.getGender());
         inParams.put("p_password", req.getPassword());
 
-        return call.execute(inParams);
+        Map<String, Object> out = call.execute(inParams);
+        Integer newUserId = (Integer) out.get("p_new_user_id");
+        if (newUserId != null && newUserId > 0) {
+            // Attribute the manager creation event to the Admin who created them
+            jdbcTemplate.update(
+                "UPDATE audit_logs SET user_id = ? WHERE table_name = 'users' AND record_id = ? AND action_type = 'INSERT'",
+                adminId, newUserId
+            );
+        }
+        return out;
     }
 
     /**

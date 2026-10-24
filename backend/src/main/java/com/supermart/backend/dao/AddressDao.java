@@ -52,6 +52,8 @@ public class AddressDao {
         }
 
         SimpleJdbcCall call = new SimpleJdbcCall(jdbcTemplate)
+                .withCatalogName("supermart_db")
+                .withoutProcedureColumnMetaDataAccess()
                 .withProcedureName("sp_add_customer_address")
                 .declareParameters(
                         new SqlParameter("p_user_id", Types.INTEGER),

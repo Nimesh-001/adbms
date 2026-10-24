@@ -70,7 +70,8 @@ CREATE TABLE brands (
     brand_id INT AUTO_INCREMENT PRIMARY KEY,
     brand_name VARCHAR(100) NOT NULL UNIQUE,
     description VARCHAR(255) NULL,
-    logo_url VARCHAR(500) NULL
+    logo_url VARCHAR(500) NULL,
+    is_active BOOLEAN DEFAULT TRUE
 ) ENGINE=InnoDB;
 
 -- 1.6 Products (Foods, Groceries, Fresh Produce)
@@ -81,6 +82,7 @@ CREATE TABLE products (
     product_name VARCHAR(200) NOT NULL,
     description TEXT NULL,
     unit_type VARCHAR(50) DEFAULT '100g', -- '100g' or 'unit'
+    base_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     unit_price DECIMAL(10,2) NOT NULL,    -- Price per 100g or unit in LKR
     current_stock INT NOT NULL DEFAULT 0,
     min_stock_level INT NOT NULL DEFAULT 10,
@@ -133,6 +135,7 @@ CREATE TABLE order_items (
     product_id INT NOT NULL,
     quantity INT NOT NULL,
     unit_price DECIMAL(10,2) NOT NULL,
+    base_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     item_total DECIMAL(10,2) NOT NULL,
     CONSTRAINT fk_items_order FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
     CONSTRAINT fk_items_product FOREIGN KEY (product_id) REFERENCES products(product_id),

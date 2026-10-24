@@ -175,15 +175,24 @@ export default function CustomerHome({
     }
   };
 
-  const handleQtyChange = (productId, delta) => {
+  const handleQtyChange = (productId, delta, maxStock = 999999) => {
     setQuantities(prev => {
       const current = prev[productId] || 1;
-      const next = Math.max(1, current + delta);
+      const stock = Math.max(0, Number(maxStock) || 0);
+      if (stock === 0) return { ...prev, [productId]: 1 };
+      const next = Math.max(1, Math.min(stock, current + delta));
       return { ...prev, [productId]: next };
     });
   };
 
-  const getQty = (productId) => quantities[productId] || 1;
+  const getQty = (productId, maxStock = 999999) => {
+    const val = quantities[productId] || 1;
+    const stock = Number(maxStock);
+    if (!isNaN(stock) && stock > 0 && val > stock) {
+      return stock;
+    }
+    return val;
+  };
 
   const handleItemClick = (product) => {
     if (!user) {
@@ -198,8 +207,34 @@ export default function CustomerHome({
       onOpenAuth('login');
       return;
     }
-    const qty = getQty(product.productId);
-    onAddToCart(product, qty);
+    const maxStock = Number(product.currentStock) || 0;
+    if (maxStock <= 0) {
+      setToastMsg(`"${product.productName}" is currently out of stock.`);
+      setTimeout(() => setToastMsg(''), 3000);
+      return;
+    }
+
+    const itemInCart = cartItems?.find(i => i.productId === product.productId);
+    const inCartQty = itemInCart ? itemInCart.quantity : 0;
+    if (inCartQty >= maxStock) {
+      setToastMsg(`All ${maxStock} available units of "${product.productName}" are already in your cart.`);
+      setTimeout(() => setToastMsg(''), 3500);
+      return;
+    }
+
+    const requestedQty = getQty(product.productId, maxStock);
+    const availableToAdd = maxStock - inCartQty;
+    const qtyToAdd = Math.min(requestedQty, availableToAdd);
+
+    if (qtyToAdd <= 0) {
+      setToastMsg(`Cannot add more than ${maxStock} units of this product.`);
+      setTimeout(() => setToastMsg(''), 3000);
+      return;
+    }
+
+    onAddToCart(product, qtyToAdd);
+    setToastMsg(`Added ${qtyToAdd} unit(s) of "${product.productName}" to cart.`);
+    setTimeout(() => setToastMsg(''), 2500);
   };
 
   const handleCopyCode = (code, e) => {
@@ -533,7 +568,7 @@ export default function CustomerHome({
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {displayedProducts.map((p) => {
-                const qty = getQty(p.productId);
+                const qty = getQty(p.productId, p.currentStock);
                 const dynamicTotal = (Number(p.unitPrice) * qty).toFixed(2);
                 const isOutOfStock = p.currentStock <= 0;
                 const isInCart = Boolean(cartItems?.some(item => item.productId === p.productId));
@@ -613,7 +648,7 @@ export default function CustomerHome({
                           
                           <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
                             <button
-                              onClick={() => handleQtyChange(p.productId, -1)}
+                              onClick={() => handleQtyChange(p.productId, -1, p.currentStock)}
                               disabled={isOutOfStock || (user && isInCart) || qty <= 1}
                               className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-700 flex items-center justify-center hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
                             >
@@ -625,14 +660,20 @@ export default function CustomerHome({
                             </span>
 
                             <button
-                              onClick={() => handleQtyChange(p.productId, 1)}
-                              disabled={isOutOfStock || (user && isInCart)}
+                              onClick={() => handleQtyChange(p.productId, 1, p.currentStock)}
+                              disabled={isOutOfStock || (user && isInCart) || qty >= p.currentStock}
                               className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-700 flex items-center justify-center hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
                             >
                               <Plus className="w-3 h-3" />
                             </button>
                           </div>
                         </div>
+
+                        {qty >= p.currentStock && !isOutOfStock && (
+                          <div className="mt-1 flex items-center space-x-1 text-[11px] font-semibold text-amber-600">
+                            <span>Max stock reached ({p.currentStock} available)</span>
+                          </div>
+                        )}
 
                         {/* Dynamic Total Price according to selected quantity */}
                         <div className="mt-3 flex items-center justify-between">

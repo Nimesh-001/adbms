@@ -81,6 +81,8 @@ public class UserDao {
      */
     public Map<String, Object> registerCustomer(RegisterRequest req) {
         SimpleJdbcCall call = new SimpleJdbcCall(jdbcTemplate)
+                .withCatalogName("supermart_db")
+                .withoutProcedureColumnMetaDataAccess()
                 .withProcedureName("sp_register_customer")
                 .declareParameters(
                         new SqlParameter("p_first_name", Types.VARCHAR),
@@ -107,6 +109,8 @@ public class UserDao {
      */
     public Map<String, Object> createOperationalManager(int adminId, CreateManagerRequest req) {
         SimpleJdbcCall call = new SimpleJdbcCall(jdbcTemplate)
+                .withCatalogName("supermart_db")
+                .withoutProcedureColumnMetaDataAccess()
                 .withProcedureName("sp_create_operational_manager")
                 .declareParameters(
                         new SqlParameter("p_admin_id", Types.INTEGER),

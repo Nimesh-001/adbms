@@ -59,7 +59,27 @@ public class OrderDao {
      */
     @Transactional
     public Map<String, Object> placeOrder(CheckoutRequest req) {
+        // Enforce stock availability before initiating transaction
+        if (req.getItems() != null) {
+            for (CheckoutItemDto item : req.getItems()) {
+                Integer currentStock = jdbcTemplate.queryForObject(
+                    "SELECT current_stock FROM products WHERE product_id = ?",
+                    Integer.class,
+                    item.getProductId()
+                );
+                if (currentStock == null || item.getQuantity() > currentStock) {
+                    Map<String, Object> err = new HashMap<>();
+                    err.put("p_order_id", 0);
+                    err.put("p_status_msg", "Stock check failed: Requested " + item.getQuantity()
+                            + " units, but only " + (currentStock == null ? 0 : currentStock) + " are available in stock.");
+                    return err;
+                }
+            }
+        }
+
         SimpleJdbcCall call = new SimpleJdbcCall(jdbcTemplate)
+                .withCatalogName("supermart_db")
+                .withoutProcedureColumnMetaDataAccess()
                 .withProcedureName("sp_place_order_transaction")
                 .declareParameters(
                         new SqlParameter("p_user_id", Types.INTEGER),
